@@ -1,7 +1,12 @@
 {
   "puzzles": [
+        { "category": "MOVIE QUOTE", "answer": "LOOK THE PROBLEM IS OVER!" },
     { "category": "PHRASE", "answer": "HAPPY BIRTHDAY JON" },
-    { "category": "MOVIE QUOTE", "answer": "MAY THE FORCE BE WITH YOU" },
+    { "category": "CLASSIC PHRASE", "answer": "JON SAVES" },
+    { "category": "RELIGION", "answer": "JONELUJAH" },
+     { "category": "POLITICS", "answer": "JONTRARIAN" },
+    { "category": "MOVIE QUOTE", "answer": "LOOK THE PROBLEM IS OVER!" },
     { "category": "THING", "answer": "POCKET SIZED TRIPOD" }
+    
   ]
 }

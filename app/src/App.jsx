@@ -68,6 +68,7 @@ function useSfx() {
     load("solve", "wof-solve.mp3");
     load("wild", "wof-wild.mp3");
     load("cashDing", "wof-ding.mp3");
+     load("cashDing2", "cash-ding.mp3");
     load("tshirt", "tshirt-sound.mp3");
     load("wrongLetter", "wrong-letter.mp3");
     load("chargeUp", "charge-up.mp3"); // charge-up loop
@@ -159,10 +160,14 @@ function useSfx() {
 }
 
 // -------------------- Puzzles
-const FALLBACK = [
-  { category: "PHRASE", answer: "HAPPY BIRTHDAY JON" },
-  { category: "MOVIE QUOTE", answer: "MAY THE FORCE BE WITH YOU" },
-  { category: "THING", answer: "POCKET SIZED TRIPOD" },
+const FALLBACK = [  
+    { category: "CELEBRATION", answer: "HAPPY BIRTHDAY JON" },
+    { category: "CLASSIC PHRASE", answer: "JON SAVES" },
+    { category: "RELIGION", answer: "JONELUJAH" },
+     { category: "POLITICS", answer: "JONTRARIAN" },
+    { category: "MOVIE QUOTE", answer: "LOOK THE PROBLEM IS OVER" },
+    { category: "THING", answer: "SONY CAMERA" },
+  
 ];
 
 async function loadPuzzles() {
@@ -606,7 +611,7 @@ export default function App() {
       }, 100);
       
     } else if (w.t === "cash" || w.t === "prize" || w.t === "freeplay") {
-      sfx.play("cashDing");
+      sfx.play("cashDing2");
       setAwaitingConsonant(true);
     } else if (w.t === "tshirt") {
       sfx.play("tshirt");
@@ -754,7 +759,7 @@ export default function App() {
       setShowWinScreen(false);
       setRoundWinner(null);
       nextPuzzle();
-    }, solved ? 14000 : 1200);
+    }, solved ? 12000 : 1200);
   }
 
   function skipWinScreen() {
