@@ -1,11 +1,12 @@
 [build]
+  base = "app"
   command = "npm run build"
   publish = "dist"
 
 [build.environment]
-  NODE_VERSION = "20"
+  NODE_VERSION = "20"   # or the Node you use locally
 
-# SPA fallback (safe even if you don't use a router)
+# React/Vite SPA routing
 [[redirects]]
   from = "/*"
   to = "/index.html"
