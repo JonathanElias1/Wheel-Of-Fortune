@@ -348,6 +348,8 @@ export default function App() {
   const [chargeSession, setChargeSession] = useState(0);
   const [snapChargeToZero, setSnapChargeToZero] = useState(false);
 
+  
+const finishingRef = useRef(false);
   const [testTshirtMode, setTestTshirtMode] = useState(false);
   const [bonusPrep, setBonusPrep] = useState(false);
 
@@ -564,13 +566,20 @@ export default function App() {
     }
   }, []);
 
-  useEffect(() => {
-    if (phase === "play" && hasSpun && board.length > 0 && board.every((b) => b.shown)) {
-      setTimeout(() => {
-        finishPuzzle(true, landed);
-      }, 750);
-    }
-  }, [board]); // eslint-disable-line
+useEffect(() => {
+  if (
+    phase === "play" &&
+    hasSpun &&
+    board.length > 0 &&
+    board.every((b) => b.shown) &&
+    !finishingRef.current // don't re-enter if finish already running
+  ) {
+    setTimeout(() => {
+      // final safety check at timeout time too
+      if (!finishingRef.current) finishPuzzle(true, landed);
+    }, 750);
+  }
+}, [board, phase, hasSpun, landed]);
 
   // ---------- Wheel rendering and utilities (same as before)
   function drawWheel(rot = 0) {
@@ -1168,85 +1177,130 @@ export default function App() {
     setSolveGuess("");
   }
 
-  function finishPuzzle(solved, lastWedge) {
-    if (solved) {
-      setGameStats((prev) => ({ ...prev, puzzlesSolved: prev.puzzlesSolved + 1 }));
-      setGameStats((prev) => {
-        const currentTeamName = teams[active].name;
-        const prevTeam = prev.teamStats[currentTeamName] || {};
-        return {
-          ...prev,
-          teamStats: {
-            ...prev.teamStats,
-            [currentTeamName]: {
-              ...prevTeam,
-              puzzlesSolved: (prevTeam.puzzlesSolved || 0) + 1,
-            },
+  // REPLACE your existing finishPuzzle(...) with this function
+function finishPuzzle(solved, lastWedge) {
+  if (solved) {
+    // prevent double-run if finishPuzzle already started
+    if (finishingRef.current) return;
+    finishingRef.current = true;
+
+    // update solved stats quickly
+    setGameStats((prev) => {
+      const currentTeamName = teams[active]?.name;
+      const prevTeam = (prev.teamStats && prev.teamStats[currentTeamName]) || {};
+      return {
+        ...prev,
+        puzzlesSolved: (prev.puzzlesSolved || 0) + 1,
+        teamStats: {
+          ...prev.teamStats,
+          [currentTeamName]: {
+            ...prevTeam,
+            puzzlesSolved: (prevTeam.puzzlesSolved || 0) + 1,
           },
-        };
+        },
+      };
+    });
+
+    setRoundWinner(teams[active].name);
+
+    // Build updated team state (assign totals/prizes) immediately so scores show correctly
+    setTeams((prevTs) => {
+      const specialWedgesWon = [];
+      const updated = prevTs.map((t, i) => {
+        if (i === active) {
+          const updatedTeam = {
+            ...t,
+            total: t.total + t.round + 300,
+            round: 0,
+          };
+
+          if (t.holding) {
+            if (!updatedTeam.prizes.includes(t.holding)) {
+              updatedTeam.prizes = [...updatedTeam.prizes, t.holding];
+            }
+            if (t.holding === "T-SHIRT") specialWedgesWon.push("tshirt");
+            else specialWedgesWon.push("mystery");
+            updatedTeam.holding = null;
+          } else {
+            if (lastWedge?.t === "wild" && mysteryPrize && !updatedTeam.prizes.includes(mysteryPrize)) {
+              updatedTeam.prizes.push(mysteryPrize);
+              specialWedgesWon.push("mystery");
+            }
+            if (lastWedge?.t === "tshirt") {
+              if (!updatedTeam.prizes.includes("T-SHIRT")) {
+                updatedTeam.prizes.push("T-SHIRT");
+                specialWedgesWon.push("tshirt");
+              }
+              setTshirtHolder(null);
+            }
+          }
+          return updatedTeam;
+        }
+        return { ...t, round: 0, holding: null };
       });
 
-      setRoundWinner(teams[active].name);
-      setShowWinScreen(true);
+      // persist the special wedges to be processed next puzzle
+      setWonSpecialWedges(specialWedgesWon);
 
-      setTeams((prevTs) => {
-        const specialWedgesWon = [];
-        const updated = prevTs.map((t, i) => {
-          if (i === active) {
-            const updatedTeam = {
-              ...t,
-              total: t.total + t.round + 300,
-              round: 0,
-            };
+      // compute winners snapshot for bonus logic same as before
+      const max = Math.max(...updated.map((t) => t.total));
+      const topTeams = updated.filter((t) => t.total === max);
+      const winnerNames = topTeams.map((t) => t.name);
+      winnersRef.current = winnerNames;
+      setWinners(winnerNames);
 
-            if (t.holding) {
-              if (!updatedTeam.prizes.includes(t.holding)) {
-                updatedTeam.prizes = [...updatedTeam.prizes, t.holding];
-              }
-              if (t.holding === "T-SHIRT") specialWedgesWon.push("tshirt");
-              else specialWedgesWon.push("mystery");
-              updatedTeam.holding = null;
-            } else {
-              if (lastWedge?.t === "wild" && mysteryPrize && !updatedTeam.prizes.includes(mysteryPrize)) {
-                updatedTeam.prizes.push(mysteryPrize);
-                specialWedgesWon.push("mystery");
-              }
-              if (lastWedge?.t === "tshirt") {
-                if (!updatedTeam.prizes.includes("T-SHIRT")) {
-                  updatedTeam.prizes.push("T-SHIRT");
-                  specialWedgesWon.push("tshirt");
-                }
-                setTshirtHolder(null);
-              }
-            }
-            return updatedTeam;
-          }
-          return { ...t, round: 0, holding: null };
-        });
+      return updated;
+    });
 
-        setWonSpecialWedges(specialWedgesWon);
+    // Prepare sequential reveal of any still-hidden letters (so the audience hears ding for each)
+    const hideIndices = board
+      .map((cell, idx) => ({ ...cell, idx }))
+      .filter((c) => isLetter(c.ch) && !c.shown)
+      .map((c) => c.idx);
 
-        const max = Math.max(...updated.map((t) => t.total));
-        const topTeams = updated.filter((t) => t.total === max);
-
-        const winnerNames = topTeams.map((t) => t.name);
-        winnersRef.current = winnerNames;
-        setWinners(winnerNames);
-
+    // If none to reveal -> short delay then show win screen
+    if (hideIndices.length === 0) {
+      setTimeout(() => {
+        // show win screen & play solve sound
+        setShowWinScreen(true);
         sfx.play("solve");
 
-        return updated;
-      });
-    } else {
-      setTeams((ts) => ts.map((t) => ({ ...t, round: 0, holding: null })));
+        // after celebration period, advance
+        setTimeout(() => {
+          setShowWinScreen(false);
+          setRoundWinner(null);
+          nextPuzzle();
+        }, 10000);
+      }, 250);
+      return;
     }
 
+    // reveal one-by-one with dings
+    hideIndices.forEach((boardIndex, i) => {
+      setTimeout(() => {
+        sfx.play("ding");
+        setBoard((currentBoard) => currentBoard.map((cell, idx) => (idx === boardIndex ? { ...cell, shown: true } : cell)));
+      }, i * 500); // 500ms between reveals — tweak if you want it faster/slower
+    });
+
+    // After all reveals finish, show win screen & solve sound, then advance
+    const totalRevealTime = hideIndices.length * 500;
     setTimeout(() => {
-      setShowWinScreen(false);
-      setRoundWinner(null);
-      nextPuzzle();
-    }, solved ? 10000 : 1200);
+      sfx.play("solve");
+      setShowWinScreen(true);
+
+      setTimeout(() => {
+        setShowWinScreen(false);
+        setRoundWinner(null);
+        nextPuzzle();
+      }, 10000);
+    }, totalRevealTime + 250);
+  } else {
+    // not solved: reset round amounts and continue as before
+    setTeams((ts) => ts.map((t) => ({ ...t, round: 0, holding: null })));
   }
+}
+
 
   function passTurn() {
     setActive((a) => nextIdx(a, teams.length));
@@ -1254,6 +1308,7 @@ export default function App() {
   }
 
   function nextPuzzle() {
+     finishingRef.current = false;
     if (wonSpecialWedges.length > 0) {
       setCurrentWedges((prev) => {
         const newWedges = [...prev];
@@ -2430,4 +2485,3 @@ export default function App() {
   );
 }
 
-/* End of updated component */
