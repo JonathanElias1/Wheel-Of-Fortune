@@ -1,0 +1,25 @@
+{
+  "puzzles": [
+         { "category": "PLACE", "answer": "JIMMYJONS" },
+    { "category": "PHRASE", "answer": "HAPPY BIRTHDAY JON" },
+    { "category": "CLASSIC PHRASE", "answer": "JON SAVED MY LIFE" },
+    { "category": "RELIGION", "answer": "JONELUJAH" },
+     { "category": "POLITICS", "answer": "JONTRARIAN" },
+    { "category": "MOVIE QUOTE", "answer": "LOOK THE PROBLEM IS OVER" },
+     { "category": "CULINARY", "answer": "JON FOOD" },
+     { "category": "WORD", "answer": "MNEMONIC" },
+   { "category": "WORD", "answer": "XENOTRANSPLANTATION" },
+    { "category": "SHOWS", "answer": "JON SNOW" },
+    { "category": "EVENT", "answer": "JONCON" },
+    { "category": "WORD", "answer": "LYMPH" },
+{ "category": "MUSIC", "answer": "THIS IS THE RHYTHM OF THE NIGHT" },
+{ "category": "WORD", "answer": "PNEUMONOULTRAMICROSCOPICSILICOVOLCANOCONIOSIS" }
+    
+  ],
+
+    "bonusPuzzles": [
+    { "category": "FINAL PHRASE", "answer": "A BRAND NEW DAY" },
+    { "category": "THING", "answer": "WINNING STREAK" },
+    { "category": "EVENT", "answer": "A SPECTACULAR FINISH" }
+  ]
+}
