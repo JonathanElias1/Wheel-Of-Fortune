@@ -7,6 +7,10 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
  * - separate READY screen modal for the bonus round
  * - countdown starts immediately when READY is pressed
  * - inline solve panel under the board (not an overlay)
+ *
+ * Minor fixes applied:
+ * - fixed bonus reveal race by allowing revealBonusLetters to accept an override set
+ * - ensured finishingRef is cleared on restart/back to setup
  */
 
 const GRADIENT = "bg-[radial-gradient(110%_110%_at_0%_0%,#5b7fff_0%,#21bd84_100%)]";
@@ -182,11 +186,18 @@ function useSfx() {
 }
 
 const FALLBACK = [
-  { category: "CELEBRATION", answer: "HAPPY BIRTHDAY JON" },
-  { category: "CLASSIC PHRASE", answer: "JON SAVED MY LIFE" },
-  { category: "RELIGIOUS STUFF", answer: "JONELUJAH" },
-  { category: "POLITICS", answer: "JONTRARIAN" },
-  { category: "MOVIE QUOTE", answer: "LOOK THE PROBLEM IS OVER" },
+   { "category": "PLACE", "answer": "JIMMYJONS" },
+    { "category": "PHRASE", "answer": "HAPPY BIRTHDAY JON" },
+    { "category": "CLASSIC PHRASE", "answer": "JON SAVED MY LIFE" },
+    { "category": "RELIGIOUS STUFF", "answer": "JONELUJAH" },
+     { "category": "POLITICS", "answer": "JONTRARIAN" },
+    { "category": "MOVIE QUOTE", "answer": "LOOK THE PROBLEM IS OVER" },
+     { "category": "CULINARY", "answer": "JON FOOD" },
+     { "category": "WORD", "answer": "MNEMONIC" },
+    { "category": "SHOWS", "answer": "JON SNOW" },
+    { "category": "EVENT", "answer": "JONCON" },
+    { "category": "WORD", "answer": "LYMPH" },
+{ "category": "MUSIC", "answer": "THIS IS THE RHYTHM OF THE NIGHT" }
 ];
 
 async function loadPuzzles() {
@@ -310,6 +321,7 @@ function WinScreen({ winner }) {
         <h1 className="text-8xl font-black text-white animate-pulse [text-shadow:0_8px_16px_rgba(0,0,0,0.5)]">🎉 WINNER! 🎉</h1>
         <p className="text-6xl text-white mt-6 font-bold [text-shadow:0_4px_8px_rgba(0,0,0,0.5)]">{winner}</p>
         <p className="text-2xl text-white mt-4 font-semibold animate-bounce">Solved the puzzle! (+$300!)</p>
+              <p className="text-sm text-white/90 mt-4 opacity-95">Press <strong>Enter</strong> or <strong>Spacebar</strong> to skip</p>
       </div>
     </div>
   );
@@ -348,13 +360,18 @@ export default function App() {
   const [chargeSession, setChargeSession] = useState(0);
   const [snapChargeToZero, setSnapChargeToZero] = useState(false);
 
-  
-const finishingRef = useRef(false);
+  const finishingRef = useRef(false);
   const [testTshirtMode, setTestTshirtMode] = useState(false);
   const [bonusPrep, setBonusPrep] = useState(false);
 
   const chargeIntervalRef = useRef(null);
   const chargeSnapshotRef = useRef(0);
+//Track/clear the reveal timeout
+const revealTimeoutRef = useRef(null);
+
+// --- NEW: refs to track the win-screen show/hide timers so we can cancel them if user skips
+const winShowTimeoutRef = useRef(null);
+const winHideTimeoutRef = useRef(null);
 
   const [tshirtHolder, setTshirtHolder] = useState(null);
   const [mysteryPrize, setMysteryPrize] = useState(null);
@@ -380,6 +397,9 @@ const finishingRef = useRef(false);
   const [showVowelModal, setShowVowelModal] = useState(false);
   const [showSolveModal, setShowSolveModal] = useState(false);
   const [solveGuess, setSolveGuess] = useState("");
+// NEW: when finishPuzzle is revealing letters, disable opening Solve modal
+const [isRevealingLetters, setIsRevealingLetters] = useState(false);
+  
 
   // Bonus round state
   const [bonusRound, setBonusRound] = useState(false);
@@ -427,23 +447,85 @@ const finishingRef = useRef(false);
   // sfx
   const sfx = useSfx();
 
+  //number of rounds
+   // number of main rounds to play (NOT bonus rounds)
+  const [roundsCount, setRoundsCount] = useState(5);
+
+  // the subset of puzzles actually used for this game
+  const [selectedPuzzles, setSelectedPuzzles] = useState(FALLBACK);
+
+
+
+
+const displayBonusPlayer = useMemo(() => {
+  if (bonusWinnerSpinning) return selectedBonusWinner || "?";
+  if (Array.isArray(winners) && winners.length) return winners[0];
+  if (Array.isArray(winnersRef.current) && winnersRef.current.length) return winnersRef.current[0];
+
+  const max = teams.length ? Math.max(...teams.map((t) => t.total)) : -Infinity;
+  const top = teams.find((t) => t.total === max);
+  return top?.name || teams[active]?.name || "Team";
+}, [bonusWinnerSpinning, selectedBonusWinner, winners, teams, active]);
+
+
+  // helper: Fisher-Yates shuffle (non-mutating)
+  const shuffle = (arr) => {
+    const a = arr.slice();
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      const t = a[i];
+      a[i] = a[j];
+      a[j] = t;
+    }
+    return a;
+  };
+
+  // select N random puzzles (no repeats), fallback to available items
+  const selectRandomPuzzles = (pool, n) => {
+    if (!Array.isArray(pool) || pool.length === 0) return FALLBACK.slice(0, n);
+    const count = Math.max(1, Math.min(n, pool.length));
+    const shuffled = shuffle(pool);
+    return shuffled.slice(0, count);
+  };
+
   // Helper functions
   const isSolved = () => board.every((b) => b.shown);
 
   const allVowelsGuessed = Array.from(VOWELS).every((vowel) => letters.has(vowel));
-  const canSpin = !spinning && !awaitingConsonant && !isSolved() && !bonusRound;
-  const canBuyVowel =
-    teams[active]?.round >= VOWEL_COST && !spinning && !isSolved() && hasSpun && !allVowelsGuessed && !bonusRound;
-  const canSolve = !spinning && hasSpun && !isSolved() && !bonusRound;
+  // const canSpin = !spinning && !awaitingConsonant && !isSolved() && !bonusRound;
+   // include reveal/finishing guard so spin is disabled while finishPuzzle is revealing letters
+  //  const canSpin = !spinning && !awaitingConsonant && !isSolved() && !bonusRound && !isRevealingLetters && !finishingRef.current;
+  // const canBuyVowel =
+  //   teams[active]?.round >= VOWEL_COST && !spinning && !isSolved() && hasSpun && !allVowelsGuessed && !bonusRound;
+  // const canSolve = !spinning && hasSpun && !isSolved() && !bonusRound && !isRevealingLetters;
+// helper booleans for UI / keyboard guards — block while letters are being revealed
+const canSpin = !spinning && !awaitingConsonant && !isSolved() && !bonusRound && !isRevealingLetters;
+const canBuyVowel =
+  teams[active]?.round >= VOWEL_COST &&
+  !spinning &&
+  !isSolved() &&
+  hasSpun &&
+  !allVowelsGuessed &&
+  !bonusRound &&
+  !isRevealingLetters;
+const canSolve = !spinning && hasSpun && !isSolved() && !bonusRound && !isRevealingLetters;
 
+  
   useEffect(() => {
     loadPuzzles().then((data) => {
       setPuzzles(data.main);
       setBonusPuzzles(data.bonus);
+
+      // default selected puzzles is just the full pool initially (setup can change)
+      setSelectedPuzzles(data.main && data.main.length ? data.main : FALLBACK);
+
       setIdx(0);
-      const p = data.main[0] || FALLBACK[0];
+      const p = (data.main && data.main[0]) || FALLBACK[0];
       setBoard(normalizeAnswer(p.answer));
       setCategory(p.category || "PHRASE");
+
+      // optionally clamp roundsCount to available puzzles
+      setRoundsCount((rc) => Math.min(rc, Math.max(1, (data.main && data.main.length) || FALLBACK.length)));
     });
   }, []);
 
@@ -479,6 +561,24 @@ const finishingRef = useRef(false);
       }
     };
   }, []);
+
+   // cleanup reveal timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (revealTimeoutRef.current) {
+        clearTimeout(revealTimeoutRef.current);
+        revealTimeoutRef.current = null;
+      }
+    };
+  }, []);
+
+//cleanup win screen timers on unmount
+useEffect(() => {
+  return () => {
+    if (winShowTimeoutRef.current) clearTimeout(winShowTimeoutRef.current);
+    if (winHideTimeoutRef.current) clearTimeout(winHideTimeoutRef.current);
+  };
+}, []);
 
   useEffect(() => {
     const onFullscreenChange = () => {
@@ -517,6 +617,8 @@ const finishingRef = useRef(false);
 
   useEffect(() => {
     const onKeyDown = (e) => {
+         // block keyboard shortcuts while letters are being revealed
+    if (isRevealingLetters) return;
       const k = e.key.toLowerCase();
 
       if (bonusRound) {
@@ -566,20 +668,62 @@ const finishingRef = useRef(false);
     }
   }, []);
 
+  useEffect(() => {
+    if (
+      phase === "play" &&
+      hasSpun &&
+      board.length > 0 &&
+      board.every((b) => b.shown) &&
+      !finishingRef.current // don't re-enter if finish already running
+    ) {
+      setTimeout(() => {
+        // final safety check at timeout time too
+        if (!finishingRef.current) finishPuzzle(true, landed);
+      }, 750);
+    }
+  }, [board, phase, hasSpun, landed]);
+
+
+  // Allow skipping the WinScreen by pressing Enter or Space — clears win timers and advances immediately
 useEffect(() => {
-  if (
-    phase === "play" &&
-    hasSpun &&
-    board.length > 0 &&
-    board.every((b) => b.shown) &&
-    !finishingRef.current // don't re-enter if finish already running
-  ) {
-    setTimeout(() => {
-      // final safety check at timeout time too
-      if (!finishingRef.current) finishPuzzle(true, landed);
-    }, 750);
-  }
-}, [board, phase, hasSpun, landed]);
+  if (!showWinScreen) return;
+
+  const onSkipKey = (e) => {
+    const key = e.key || "";
+    if (key === "Enter" || key === " " || key === "Spacebar" || e.code === "Space") {
+      e.preventDefault();
+
+      // stop the solve audio if it's playing
+      try {
+        sfx.stop("solve");
+      } catch (err) {
+        // ignore if audio not ready
+      }
+
+      // clear pending timeouts
+      if (winShowTimeoutRef.current) {
+        clearTimeout(winShowTimeoutRef.current);
+        winShowTimeoutRef.current = null;
+      }
+      if (winHideTimeoutRef.current) {
+        clearTimeout(winHideTimeoutRef.current);
+        winHideTimeoutRef.current = null;
+      }
+
+      // hide win screen & advance
+      setShowWinScreen(false);
+      setRoundWinner(null);
+      setIsRevealingLetters(false);
+      finishingRef.current = false;
+
+      // call nextPuzzle() to continue as if the timeout elapsed
+      nextPuzzle();
+    }
+  };
+
+  window.addEventListener("keydown", onSkipKey);
+  return () => window.removeEventListener("keydown", onSkipKey);
+}, [showWinScreen]);
 
   // ---------- Wheel rendering and utilities (same as before)
   function drawWheel(rot = 0) {
@@ -774,6 +918,7 @@ useEffect(() => {
 
   // ---------- Charge logic
   const startCharge = () => {
+      if (isRevealingLetters || finishingRef.current) return; // defensive guard
     if (!canSpin || isCharging) return;
     setIsCharging(true);
 
@@ -845,66 +990,71 @@ useEffect(() => {
     onSpin(power);
   };
 
-  function onSpin(power = 10) {
-    if (spinning || awaitingConsonant || isSolved()) return;
+function onSpin(power = 10) {
+  // Defensive guards: don't spin while the finishing/reveal sequence is running
+  if (finishingRef.current || isRevealingLetters) return;
 
-    setLanded(null);
-    setHasSpun(true);
-    setSpinning(true);
-    setZoomed(true);
-    sfx.play("spin");
+  // Normal guards: don't spin if already spinning, awaiting a consonant, solved, or in bonus round
+  if (spinning || awaitingConsonant || isSolved() || bonusRound) return;
 
-    setGameStats((prev) => {
-      const currentTeamName = teams[active]?.name;
-      const prevTeam = prev.teamStats[currentTeamName] || {};
-      return {
-        ...prev,
-        totalSpins: prev.totalSpins + 1,
-        teamStats: {
-          ...prev.teamStats,
-          [currentTeamName]: {
-            ...prevTeam,
-            spins: (prevTeam.spins || 0) + 1,
-          },
+  setLanded(null);
+  setHasSpun(true);
+  setSpinning(true);
+  setZoomed(true);
+  sfx.play("spin");
+
+  setGameStats((prev) => {
+    const currentTeamName = teams[active]?.name;
+    const prevTeam = prev.teamStats[currentTeamName] || {};
+    return {
+      ...prev,
+      totalSpins: prev.totalSpins + 1,
+      teamStats: {
+        ...prev.teamStats,
+        [currentTeamName]: {
+          ...prevTeam,
+          spins: (prevTeam.spins || 0) + 1,
         },
-      };
-    });
+      },
+    };
+  });
 
-    const baseTurns = 3;
-    const powerTurns = Math.round((power / 100) * 6);
-    const randomTurns = Math.floor(Math.random() * 2);
-    const extraTurns = baseTurns + powerTurns + randomTurns;
-    const duration = 1800 + power * 25;
+  const baseTurns = 3;
+  const powerTurns = Math.round((power / 100) * 6);
+  const randomTurns = Math.floor(Math.random() * 2);
+  const extraTurns = baseTurns + powerTurns + randomTurns;
+  const duration = 1800 + power * 25;
 
-    const pre = angle - 0.35;
-    animateAngle(angle, pre, 140, "inout", () => {
-      const stopAt = Math.random() * Math.PI * 2;
-      const final = pre + extraTurns * Math.PI * 2 + stopAt;
-      const start = performance.now();
+  const pre = angle - 0.35;
+  animateAngle(angle, pre, 140, "inout", () => {
+    const stopAt = Math.random() * Math.PI * 2;
+    const final = pre + extraTurns * Math.PI * 2 + stopAt;
+    const start = performance.now();
 
-      const tick = (t) => {
-        const p = Math.min(1, (t - start) / duration);
-        const eased = 1 - Math.pow(1 - p, 3);
-        const a = pre + (final - pre) * eased;
-        setAngle(a);
+    const tick = (t) => {
+      const p = Math.min(1, (t - start) / duration);
+      const eased = 1 - Math.pow(1 - p, 3);
+      const a = pre + (final - pre) * eased;
+      setAngle(a);
 
-        if (p < 1) {
-          requestAnimationFrame(tick);
-        } else {
-          sfx.stop("spin");
-          const i = wedgeIndexForAngle(a);
-          const w = currentWedges[i];
-          setLanded(w);
-          handleLanding(w);
-          setTimeout(() => {
-            setSpinning(false);
-            setZoomed(false);
-          }, 2500);
-        }
-      };
-      requestAnimationFrame(tick);
-    });
-  }
+      if (p < 1) {
+        requestAnimationFrame(tick);
+      } else {
+        try { sfx.stop("spin"); } catch (e) {}
+        const i = wedgeIndexForAngle(a);
+        const w = currentWedges[i];
+        setLanded(w);
+        handleLanding(w);
+        setTimeout(() => {
+          setSpinning(false);
+          setZoomed(false);
+        }, 2500);
+      }
+    };
+
+    requestAnimationFrame(tick);
+  });
+}
 
   function animateAngle(from, to, ms, easing = "out", onDone) {
     const start = performance.now();
@@ -1021,15 +1171,22 @@ useEffect(() => {
   }
 
   function guessLetter(ch) {
+    // defensive guards
+    if (isRevealingLetters) return;
     if (!awaitingConsonant) return;
     if (VOWELS.has(ch) || letters.has(ch)) return;
 
+    // add letter to guessed set immediately
     setLetters((S) => new Set(S).add(ch));
+
     const hitIndices = board.reduce((acc, cell, index) => (cell.ch === ch ? [...acc, index] : acc), []);
 
     const currentTeamName = teams[active].name;
 
     if (hitIndices.length > 0) {
+      // BEGIN reveal lock so UI/controls are disabled while letters animate
+      setIsRevealingLetters(true);
+
       setGameStats((prev) => {
         const prevTeam = prev.teamStats[currentTeamName] || {};
         return {
@@ -1059,15 +1216,32 @@ useEffect(() => {
         setTeams((prev) => prev.map((t, i) => (i === active ? { ...t, holding: landed.prize.label } : t)));
       }
 
+      // schedule the per-letter reveal (sound + setBoard)
       hitIndices.forEach((boardIndex, i) => {
         setTimeout(() => {
           sfx.play("ding");
-          setBoard((currentBoard) => currentBoard.map((cell, idx) => (idx === boardIndex ? { ...cell, shown: true } : cell)));
+          setBoard((currentBoard) =>
+            currentBoard.map((cell, idx) => (idx === boardIndex ? { ...cell, shown: true } : cell))
+          );
         }, i * 750);
       });
 
+      // clear any existing reveal timeout and set a new one to clear the reveal lock
+      if (revealTimeoutRef.current) {
+        clearTimeout(revealTimeoutRef.current);
+        revealTimeoutRef.current = null;
+      }
+      const totalRevealTime = hitIndices.length * 750;
+      revealTimeoutRef.current = setTimeout(() => {
+        setIsRevealingLetters(false);
+        revealTimeoutRef.current = null;
+        // after reveal, keep awaitingConsonant false (turn doesn't continue automatically)
+      }, totalRevealTime + 50); // small buffer to ensure last ding finishes
+
+      // end of consonant waiting immediately after guess (you already did this earlier)
       setAwaitingConsonant(false);
     } else {
+      // incorrect consonant
       setGameStats((prev) => {
         const prevTeam = prev.teamStats[currentTeamName] || {};
         return {
@@ -1089,6 +1263,7 @@ useEffect(() => {
   }
 
   function handleBuyVowel(ch) {
+    if (isRevealingLetters) return;  // defensive guard
     setShowVowelModal(false);
     if (!ch || !VOWELS.has(ch) || ch.length !== 1) return;
     if (letters.has(ch)) return;
@@ -1122,6 +1297,9 @@ useEffect(() => {
     const hitIndices = board.reduce((acc, cell, index) => (cell.ch === ch ? [...acc, index] : acc), []);
 
     if (hitIndices.length > 0) {
+      // BEGIN reveal lock
+      setIsRevealingLetters(true);
+
       setGameStats((prev) => {
         const prevTeam = prev.teamStats[currentTeamName] || {};
         return {
@@ -1143,7 +1321,19 @@ useEffect(() => {
           setBoard((currentBoard) => currentBoard.map((cell, idx) => (idx === boardIndex ? { ...cell, shown: true } : cell)));
         }, i * 750);
       });
+
+      // schedule reveal-clear
+      if (revealTimeoutRef.current) {
+        clearTimeout(revealTimeoutRef.current);
+        revealTimeoutRef.current = null;
+      }
+      const totalRevealTime = hitIndices.length * 750;
+      revealTimeoutRef.current = setTimeout(() => {
+        setIsRevealingLetters(false);
+        revealTimeoutRef.current = null;
+      }, totalRevealTime + 50);
     } else {
+      // incorrect vowel
       setGameStats((prev) => {
         const prevTeam = prev.teamStats[currentTeamName] || {};
         return {
@@ -1164,6 +1354,7 @@ useEffect(() => {
 
   function handleSolve() {
     setShowSolveModal(false);
+    if (isRevealingLetters) return; // <-- defensive guard
     if (!solveGuess) return;
 
     const answer = board.map((b) => b.ch).join("");
@@ -1177,12 +1368,14 @@ useEffect(() => {
     setSolveGuess("");
   }
 
-  // REPLACE your existing finishPuzzle(...) with this function
 function finishPuzzle(solved, lastWedge) {
   if (solved) {
     // prevent double-run if finishPuzzle already started
     if (finishingRef.current) return;
     finishingRef.current = true;
+
+    // block opening Solve modal / pressing Solve while letters are being revealed
+    setIsRevealingLetters(true);
 
     // update solved stats quickly
     setGameStats((prev) => {
@@ -1258,43 +1451,81 @@ function finishPuzzle(solved, lastWedge) {
       .filter((c) => isLetter(c.ch) && !c.shown)
       .map((c) => c.idx);
 
-    // If none to reveal -> short delay then show win screen
-    if (hideIndices.length === 0) {
-      setTimeout(() => {
-        // show win screen & play solve sound
-        setShowWinScreen(true);
-        sfx.play("solve");
+    // // If none to reveal -> short delay then show win screen
+    // if (hideIndices.length === 0) {
+    //   setTimeout(() => {
+    //     // show win screen & play solve sound
+    //     setShowWinScreen(true);
+    //     sfx.play("solve");
 
-        // after celebration period, advance
-        setTimeout(() => {
-          setShowWinScreen(false);
-          setRoundWinner(null);
-          nextPuzzle();
-        }, 10000);
-      }, 250);
-      return;
-    }
+    //     // after celebration period, advance
+    //     setTimeout(() => {
+    //       setShowWinScreen(false);
+    //       setRoundWinner(null);
+
+    //       // clear revealing flag and next puzzle
+    //       setIsRevealingLetters(false);
+    //       nextPuzzle();
+    //     }, 10000);
+    //   }, 250);
+    //   return;
+    // }
+    if (hideIndices.length === 0) {
+  // show-after delay
+  if (winShowTimeoutRef.current) clearTimeout(winShowTimeoutRef.current);
+  winShowTimeoutRef.current = setTimeout(() => {
+    setShowWinScreen(true);
+    sfx.play("solve");
+
+    // hide-after-10s
+    if (winHideTimeoutRef.current) clearTimeout(winHideTimeoutRef.current);
+    winHideTimeoutRef.current = setTimeout(() => {
+      winHideTimeoutRef.current = null;
+      setShowWinScreen(false);
+      setRoundWinner(null);
+
+      // clear revealing flag and next puzzle
+      setIsRevealingLetters(false);
+      finishingRef.current = false;
+      nextPuzzle();
+    }, 10000);
+
+    winShowTimeoutRef.current = null;
+  }, 250);
+
+  return;
+}
 
     // reveal one-by-one with dings
     hideIndices.forEach((boardIndex, i) => {
       setTimeout(() => {
         sfx.play("ding");
         setBoard((currentBoard) => currentBoard.map((cell, idx) => (idx === boardIndex ? { ...cell, shown: true } : cell)));
-      }, i * 500); // 500ms between reveals — tweak if you want it faster/slower
+      }, i * 500);
     });
 
     // After all reveals finish, show win screen & solve sound, then advance
-    const totalRevealTime = hideIndices.length * 500;
-    setTimeout(() => {
-      sfx.play("solve");
-      setShowWinScreen(true);
+   // After all reveals finish, show win screen & solve sound, then advance
+const totalRevealTime = hideIndices.length * 500;
+if (winShowTimeoutRef.current) clearTimeout(winShowTimeoutRef.current);
+winShowTimeoutRef.current = setTimeout(() => {
+  sfx.play("solve");
+  setShowWinScreen(true);
 
-      setTimeout(() => {
-        setShowWinScreen(false);
-        setRoundWinner(null);
-        nextPuzzle();
-      }, 10000);
-    }, totalRevealTime + 250);
+  if (winHideTimeoutRef.current) clearTimeout(winHideTimeoutRef.current);
+  winHideTimeoutRef.current = setTimeout(() => {
+    winHideTimeoutRef.current = null;
+    setShowWinScreen(false);
+    setRoundWinner(null);
+
+    // clear revealing flag before moving on
+    setIsRevealingLetters(false);
+    finishingRef.current = false;
+    nextPuzzle();
+  }, 10000);
+
+  winShowTimeoutRef.current = null;
+}, totalRevealTime + 250);
   } else {
     // not solved: reset round amounts and continue as before
     setTeams((ts) => ts.map((t) => ({ ...t, round: 0, holding: null })));
@@ -1308,88 +1539,91 @@ function finishPuzzle(solved, lastWedge) {
   }
 
   function nextPuzzle() {
-     finishingRef.current = false;
-    if (wonSpecialWedges.length > 0) {
-      setCurrentWedges((prev) => {
-        const newWedges = [...prev];
-        setTshirtHolder(null);
-        wonSpecialWedges.forEach((wedgeType) => {
-          if (wedgeType === "tshirt") {
-            const tshirtIndex = newWedges.findIndex((w) => w.t === "tshirt");
-            if (tshirtIndex !== -1) {
-              newWedges[tshirtIndex] = { t: "cash", v: 500, c: "#95C85A" };
-            }
-          } else if (wedgeType === "mystery") {
-            const mysteryIndex = newWedges.findIndex((w) => w.t === "wild");
-            if (mysteryIndex !== -1) {
-              const randomValue = Math.floor(Math.random() * 5) * 500 + 500;
-              const colors = ["#95C85A", "#8C4399", "#C9237B", "#D15C22", "#E23759"];
-              const randomColor = colors[Math.floor(Math.random() * colors.length)];
-              newWedges[mysteryIndex] = { t: "cash", v: randomValue, c: randomColor };
-            }
+  finishingRef.current = false;
+  if (wonSpecialWedges.length > 0) {
+    setCurrentWedges((prev) => {
+      const newWedges = [...prev];
+      setTshirtHolder(null);
+      wonSpecialWedges.forEach((wedgeType) => {
+        if (wedgeType === "tshirt") {
+          const tshirtIndex = newWedges.findIndex((w) => w.t === "tshirt");
+          if (tshirtIndex !== -1) {
+            newWedges[tshirtIndex] = { t: "cash", v: 500, c: "#95C85A" };
           }
-        });
-        return newWedges;
-      });
-      setWonSpecialWedges([]);
-    }
-
-    setMysteryPrize(null);
-    const next = idx + 1;
-
-    if (next >= puzzles.length) {
-      let topTeams = [];
-
-      if (winnersRef.current && winnersRef.current.length > 0) {
-        topTeams = teams.filter((t) => winnersRef.current.includes(t.name));
-      } else if (winners && winners.length > 0) {
-        topTeams = teams.filter((t) => winners.includes(t.name));
-      } else if (teams && teams.length > 0) {
-        const maxTotal = Math.max(...teams.map((t) => t.total));
-        const finalWinners = teams.filter((t) => t.total === maxTotal).map((t) => t.name);
-        winnersRef.current = finalWinners;
-        setWinners(finalWinners);
-        topTeams = teams.filter((t) => finalWinners.includes(t.name));
-      } else {
-        setPhase("done");
-        return;
-      }
-
-      const randomBonusIndex = Math.floor(Math.random() * bonusPuzzles.length);
-      const bonusPuzzle = bonusPuzzles[randomBonusIndex] || FALLBACK[0];
-
-      if (topTeams.length > 0) {
-        setBoard(normalizeAnswer(bonusPuzzle.answer));
-        setCategory(bonusPuzzle.category || "PHRASE");
-        setBonusRound(true);
-        setPhase("bonus");
-
-        if (topTeams.length > 1) {
-          setShowBonusSelector(true);
-        } else {
-          const single = topTeams[0].name;
-          winnersRef.current = [single];
-          setWinners([single]);
+        } else if (wedgeType === "mystery") {
+          const mysteryIndex = newWedges.findIndex((w) => w.t === "wild");
+          if (mysteryIndex !== -1) {
+            const randomValue = Math.floor(Math.random() * 5) * 500 + 500;
+            const colors = ["#95C85A", "#8C4399", "#C9237B", "#D15C22", "#E23759"];
+            const randomColor = colors[Math.floor(Math.random() * colors.length)];
+            newWedges[mysteryIndex] = { t: "cash", v: randomValue, c: randomColor };
+          }
         }
-        return;
-      } else {
-        setPhase("done");
-        return;
-      }
+      });
+      return newWedges;
+    });
+    setWonSpecialWedges([]);
+  }
+
+  setMysteryPrize(null);
+  const next = idx + 1;
+
+  // <-- use selectedPuzzles here (end of main rounds when next >= selectedPuzzles.length)
+  if (next >= selectedPuzzles.length) {
+    let topTeams = [];
+
+    if (winnersRef.current && winnersRef.current.length > 0) {
+      topTeams = teams.filter((t) => winnersRef.current.includes(t.name));
+    } else if (winners && winners.length > 0) {
+      topTeams = teams.filter((t) => winners.includes(t.name));
+    } else if (teams && teams.length > 0) {
+      const maxTotal = Math.max(...teams.map((t) => t.total));
+      const finalWinners = teams.filter((t) => t.total === maxTotal).map((t) => t.name);
+      winnersRef.current = finalWinners;
+      setWinners(finalWinners);
+      topTeams = teams.filter((t) => finalWinners.includes(t.name));
+    } else {
+      setPhase("done");
+      return;
     }
 
-    setIdx(next);
-    const p = puzzles[next] || FALLBACK[0];
-    setBoard(normalizeAnswer(p.answer));
-    setCategory(p.category || "PHRASE");
-    setLetters(new Set());
-    setLanded(null);
-    setAwaitingConsonant(false);
-    setActive((a) => nextIdx(a, teams.length));
-    setTeams((ts) => ts.map((t) => ({ ...t, round: 0, holding: null })));
-    setAngle(0);
-    setHasSpun(false);
+    const randomBonusIndex = Math.floor(Math.random() * bonusPuzzles.length);
+    const bonusPuzzle = bonusPuzzles[randomBonusIndex] || FALLBACK[0];
+
+    if (topTeams.length > 0) {
+      setBoard(normalizeAnswer(bonusPuzzle.answer));
+      setCategory(bonusPuzzle.category || "PHRASE");
+      setBonusRound(true);
+      setPhase("bonus");
+
+      if (topTeams.length > 1) {
+        setShowBonusSelector(true);
+      } else {
+        const single = topTeams[0].name;
+        winnersRef.current = [single];
+        setWinners([single]);
+      }
+      return;
+    } else {
+      setPhase("done");
+      return;
+    }
   }
+
+  // still in main rounds -> advance within selectedPuzzles
+  setIdx(next);
+  const p = selectedPuzzles[next] || FALLBACK[0];
+  setBoard(normalizeAnswer(p.answer));
+  setCategory(p.category || "PHRASE");
+  setLetters(new Set());
+  setLanded(null);
+  setAwaitingConsonant(false);
+  setActive((a) => nextIdx(a, teams.length));
+  setTeams((ts) => ts.map((t) => ({ ...t, round: 0, holding: null })));
+  setAngle(0);
+  setHasSpun(false);
+}
+
 
   // Bonus Round Functions
   function startBonusWinnerSelector() {
@@ -1472,65 +1706,59 @@ function finishPuzzle(solved, lastWedge) {
       return;
     } else if (bonusLetterType === "vowel" && !bonusVowel) {
       if (VOWELS.has(letter) && !bonusLetters.has(letter)) {
+        // compute the new set synchronously to avoid stale reads in revealBonusLetters
+        const newBonusLetters = new Set(bonusLetters);
+        newBonusLetters.add(letter);
+
         setBonusVowel(letter);
-        setBonusLetters((prev) => new Set([...prev, letter]));
+        setBonusLetters(newBonusLetters);
         setShowBonusLetterModal(false);
 
         // Reveal letters and then show READY modal (board kept hidden until READY)
-        revealBonusLetters();
+        revealBonusLetters(newBonusLetters);
       }
     }
   }
 
-  function revealBonusLetters() {
-    // NEW: mark reveal as in-progress to prevent spinner flash
-    setBonusRevealing(true);
+  // NOTE: revealBonusLetters accepts an optional override set so callers can pass the latest set synchronously
+// Replace your existing revealBonusLetters(...) with this:
+function revealBonusLetters(overrideAllBonusLetters = null) {
+  console.log("revealBonusLetters: instant reveal (no animation/no sounds)");
 
-    const allBonusLetters = new Set([...bonusLetters, ...bonusConsonants, bonusVowel]);
+  // defensively stop any playing SFX
+  try { sfx.stop("ding"); } catch (e) {}
+  try { sfx.stop("wrongLetter"); } catch (e) {}
+  try { sfx.stopLoop("chargeUp"); } catch (e) {}
+  try { sfx.stop("chargeUp"); } catch (e) {}
 
-    const hitIndices = [];
-    board.forEach((cell, index) => {
-      if (allBonusLetters.has(cell.ch)) {
-        hitIndices.push(index);
-      }
-    });
+  // clear revealing flag
+  setBonusRevealing(false);
 
-    if (hitIndices.length > 0) {
-      hitIndices.forEach((boardIndex, i) => {
-        setTimeout(() => {
-          sfx.play("ding");
-          setBoard((currentBoard) => currentBoard.map((cell, idx) => (idx === boardIndex ? { ...cell, shown: true } : cell)));
-        }, i * 200);
-      });
+  // compute the set of letters to reveal synchronously
+  // const allBonusLetters = overrideAllBonusLetters ?? new Set([...bonusLetters, ...bonusConsonants, bonusVowel]);
+const allBonusLetters = overrideAllBonusLetters ?? new Set([
+  ...bonusLetters,
+  ...bonusConsonants,
+  ...(bonusVowel ? [bonusVowel] : []),
+]);
 
-      setTimeout(() => {
-        // After reveals finish, show READY modal and keep board hidden until READY pressed
-        setBonusRevealing(false); // <-- clear reveal flag
-        setShowBonusLetterModal(false);
-        setBonusAwaitingReady(true);
-        setBonusHideBoard(true);
-        setShowBonusSolveModal(false);
-        setBonusActive(false);
-        setBonusCountdown(20);
+  // reveal them in one synchronous state update (no timeouts, no sounds)
+  setBoard((current) =>
+    current.map((cell) =>
+      // leave non-letters (spaces/punctuation) as-is; reveal matching letters
+      (isLetter(cell.ch) && allBonusLetters.has(cell.ch)) ? { ...cell, shown: true } : cell
+    )
+  );
 
-        // show separate READY screen modal
-        setBonusReadyModalVisible(true);
-      }, hitIndices.length * 200 + 300);
-    } else {
-      setTimeout(() => {
-        setBonusRevealing(false); // <-- clear reveal flag
-        setShowBonusLetterModal(false);
-        setBonusAwaitingReady(true);
-        setBonusHideBoard(true);
-        setShowBonusSolveModal(false);
-        setBonusActive(false);
-        setBonusCountdown(20);
-
-        // show separate READY screen modal
-        setBonusReadyModalVisible(true);
-      }, 300);
-    }
-  }
+  // close chooser UI and open READY flow, but keep the board hidden until READY pressed
+  setShowBonusLetterModal(false);
+  setBonusAwaitingReady(true);
+  setBonusHideBoard(true);
+  setShowBonusSolveModal(false);
+  setBonusActive(false);
+  setBonusCountdown(20);
+  setBonusReadyModalVisible(true);
+}
 
   // Called when user presses the big READY button on the separate ready screen
   function pressReadyStartBonus() {
@@ -1593,63 +1821,110 @@ function finishPuzzle(solved, lastWedge) {
     }, 1800);
   }
 
-  function restartAll() {
-    setIdx(0);
-    const p = puzzles[0] || FALLBACK[0];
-    setBoard(normalizeAnswer(p.answer));
-    setCategory(p.category || "PHRASE");
-    setLetters(new Set());
-    setLanded(null);
-    setAwaitingConsonant(false);
-    setTeams((ts) => ts.map((t) => ({ name: t.name, total: 0, round: 0, prizes: [], holding: null })));
-    setActive(0);
-    setAngle(0);
-    setZoomed(false);
-    setWheelPx(BASE_WHEEL_PX);
-    setPhase("play");
-    setWinners([]);
-    winnersRef.current = [];
-    setHasSpun(false);
-    setMysteryPrize(null);
-    setWonSpecialWedges([]);
-    setCurrentWedges([...WEDGES]);
+function restartAll() {
 
-    setBonusSpinning(false);
-    setBonusPrize("");
-    setBonusLetters(new Set(["R", "S", "T", "L", "N", "E"]));
-    setBonusConsonants([]);
-    setBonusVowel("");
-
-    setBonusActive(false);
-    setShowBonusLetterModal(false);
-    setBonusLetterType("");
-    setBonusGuess("");
-    setShowBonusSolveModal(false);
-    setBonusRound(false);
-
-    setBonusCountdown(20);
-    setBonusPrep(false);
-    setBonusPrepCountdown(5);
-
-    setBonusAwaitingReady(false);
-    setBonusHideBoard(false);
-    setBonusReadyModalVisible(false);
-
-    setGameStats({
-      totalSpins: 0,
-      bankrupts: 0,
-      loseTurns: 0,
-      puzzlesSolved: 0,
-      vowelsBought: 0,
-      correctGuesses: 0,
-      incorrectGuesses: 0,
-      teamStats: {},
-    });
-    setBonusResult(null);
-    setBonusWinnerName(null);
+  // stop only the solve/victory sound
+  try {
+    sfx.stop("solve");
+  } catch (e) {
+    // ignore if audio not ready
   }
+ // clear possible pending win-screen timers
+if (winShowTimeoutRef.current) {
+  clearTimeout(winShowTimeoutRef.current);
+  winShowTimeoutRef.current = null;
+}
+if (winHideTimeoutRef.current) {
+  clearTimeout(winHideTimeoutRef.current);
+  winHideTimeoutRef.current = null;
+}
+  // make sure finishing marker is cleared so puzzle flow is healthy after restart
+  finishingRef.current = false;
+setIsRevealingLetters(false);
+  // pick new random main rounds (clamped to available puzzles)
+  const count = Math.max(1, Math.min(roundsCount, (puzzles && puzzles.length) || FALLBACK.length));
+  const chosen = selectRandomPuzzles(puzzles && puzzles.length ? puzzles : FALLBACK, count);
+  setSelectedPuzzles(chosen);
+
+  // initialize first puzzle from chosen set
+  setIdx(0);
+  const first = chosen[0] || FALLBACK[0];
+  setBoard(normalizeAnswer(first.answer));
+  setCategory(first.category || "PHRASE");
+
+  setLetters(new Set());
+  setLanded(null);
+  setAwaitingConsonant(false);
+  setTeams((ts) => ts.map((t) => ({ name: t.name, total: 0, round: 0, prizes: [], holding: null })));
+  setActive(0);
+  setAngle(0);
+  setZoomed(false);
+  setWheelPx(BASE_WHEEL_PX);
+  setPhase("play");
+  setWinners([]);
+  winnersRef.current = [];
+  setHasSpun(false);
+  setMysteryPrize(null);
+  setWonSpecialWedges([]);
+  setCurrentWedges([...WEDGES]);
+
+  // (removed stray setSelectedPuzzles[0] bug)
+  setBonusSpinning(false);
+  setBonusPrize("");
+  setBonusLetters(new Set(["R", "S", "T", "L", "N", "E"]));
+  setBonusConsonants([]);
+  setBonusVowel("");
+
+  setBonusActive(false);
+  setShowBonusLetterModal(false);
+  setBonusLetterType("");
+  setBonusGuess("");
+  setShowBonusSolveModal(false);
+  setBonusRound(false);
+
+  setBonusCountdown(20);
+  setBonusPrep(false);
+  setBonusPrepCountdown(5);
+
+  setBonusAwaitingReady(false);
+  setBonusHideBoard(false);
+  setBonusReadyModalVisible(false);
+
+  setGameStats({
+    totalSpins: 0,
+    bankrupts: 0,
+    loseTurns: 0,
+    puzzlesSolved: 0,
+    vowelsBought: 0,
+    correctGuesses: 0,
+    incorrectGuesses: 0,
+    teamStats: {},
+  });
+  setBonusResult(null);
+  setBonusWinnerName(null);
+}
 
   function backToSetup() {
+
+     // stop only the solve/victory sound
+  try {
+    sfx.stop("solve");
+  } catch (e) {
+    // ignore if audio not ready
+  }
+  // clear possible pending win-screen timers
+if (winShowTimeoutRef.current) {
+  clearTimeout(winShowTimeoutRef.current);
+  winShowTimeoutRef.current = null;
+}
+if (winHideTimeoutRef.current) {
+  clearTimeout(winHideTimeoutRef.current);
+  winHideTimeoutRef.current = null;
+}
+
+    // clear finishing marker so next game is clean
+    finishingRef.current = false;
+
     setPhase("setup");
     setWinners([]);
     winnersRef.current = [];
@@ -1658,9 +1933,9 @@ function finishPuzzle(solved, lastWedge) {
     setHasSpun(false);
     setTeams(teamNames.map((name, i) => ({ name: name || `Team ${i + 1}`, total: 0, round: 0, prizes: [], holding: null })));
     setIdx(0);
-    const p = puzzles[0] || FALLBACK[0];
-    setBoard(normalizeAnswer(p.answer));
-    setCategory(p.category || "PHRASE");
+const p = selectedPuzzles[0] || FALLBACK[0];
+setBoard(normalizeAnswer(p.answer));
+setCategory(p.category || "PHRASE");
     setLetters(new Set());
     setLanded(null);
     setAwaitingConsonant(false);
@@ -1766,7 +2041,7 @@ function finishPuzzle(solved, lastWedge) {
             <button
               key={vowel}
               onClick={() => handleBuyVowel(vowel)}
-              disabled={letters.has(vowel)}
+             disabled={isRevealingLetters || letters.has(vowel)}
               className={cls("w-12 h-12 rounded-lg text-lg font-bold", letters.has(vowel) ? "bg-gray-400 text-gray-600" : "bg-blue-500 text-white")}
             >
               {vowel}
@@ -1780,29 +2055,64 @@ function finishPuzzle(solved, lastWedge) {
     </div>
   );
 
-  const SolveModal = () => (
+const SolveModal = () => {
+  const inputRef = useRef(null);
+
+  useEffect(() => {
+    // focus input after modal appears
+    const t = setTimeout(() => inputRef.current?.focus(), 40);
+    return () => clearTimeout(t);
+  }, []);
+
+  return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80">
       <div className="bg-white rounded-xl p-6 w-full max-w-md text-center">
         <h2 className="text-2xl font-bold mb-4 text-black">Solve the Puzzle</h2>
-        <input
-          type="text"
-          value={solveGuess}
-          onChange={(e) => setSolveGuess(e.target.value)}
-          className="w-full px-4 py-3 rounded-xl border-2 border-gray-300 text-lg font-semibold text-black mb-4"
-          placeholder="Enter your guess"
-          autoFocus
-        />
-        <div className="flex gap-2 justify-center">
-          <button onClick={handleSolve} className="px-6 py-3 rounded-xl bg-purple-500 text-white font-bold">
-            Submit
-          </button>
-          <button onClick={() => setShowSolveModal(false)} className="px-6 py-3 rounded-xl bg-gray-200 text-gray-800 font-bold">
-            Cancel
-          </button>
-        </div>
+
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            handleSolve();
+          }}
+        >
+          <input
+            ref={inputRef}
+            type="text"
+            value={solveGuess}
+            onChange={(e) => setSolveGuess(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                e.stopPropagation();
+                handleSolve();
+              }
+            }}
+            className="w-full px-4 py-3 rounded-xl border-2 border-gray-300 text-lg font-semibold text-black mb-4"
+            placeholder="Enter your guess"
+            autoFocus
+          />
+
+          <div className="flex gap-2 justify-center">
+            <button type="submit" className="px-6 py-3 rounded-xl bg-purple-500 text-white font-bold">
+              Submit
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setSolveGuess("");      // clear typed letters when cancelling
+                setShowSolveModal(false);
+              }}
+              className="px-6 py-3 rounded-xl bg-gray-200 text-gray-800 font-bold"
+            >
+              Cancel
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   );
+};
+
 
   const MysterySpinnerModal = () => (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80">
@@ -1821,36 +2131,112 @@ function finishPuzzle(solved, lastWedge) {
     </div>
   );
 
-  const BonusLetterModal = () => (
+const BonusLetterModal = () => {
+  const GIVEN = ["R", "S", "T", "L", "N", "E"];
+  const isSelectingConsonants = bonusLetterType === "consonant";
+
+  // pickable letters: consonants (not vowels), not given, not already selected
+  const pickableLetters = LETTERS.filter((letter) => {
+    if (isSelectingConsonants) {
+      return !VOWELS.has(letter) && !GIVEN.includes(letter) && !bonusConsonants.includes(letter);
+    } else {
+      // vowel phase: only vowels not given and not already chosen
+      return VOWELS.has(letter) && !GIVEN.includes(letter) && !bonusVowel;
+    }
+  });
+
+  const unselectConsonant = (ch) => {
+    setBonusConsonants((prev) => prev.filter((c) => c !== ch));
+    setBonusLetters((prev) => {
+      const next = new Set(prev);
+      next.delete(ch);
+      return next;
+    });
+  };
+
+  const unselectVowel = () => {
+    if (!bonusVowel) return;
+    const removed = bonusVowel;
+    setBonusVowel("");
+    setBonusLetters((prev) => {
+      const next = new Set(prev);
+      next.delete(removed);
+      return next;
+    });
+  };
+
+  // center vowels: use a flex container; consonants remain a grid
+  const pickContainerClass = isSelectingConsonants ? "grid grid-cols-6 gap-2 mb-4" : "flex justify-center gap-6 mb-4";
+
+  return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80">
       <div className="bg-white rounded-xl p-6 w-full max-w-md text-center">
         <h2 className="text-2xl font-bold mb-4 text-black">
-          {bonusLetterType === "consonant" ? `Choose Consonant ${bonusConsonants.length + 1}/3` : "Choose 1 Vowel"}
+          {isSelectingConsonants ? `Choose Consonant ${bonusConsonants.length + 1}/3` : "Choose 1 Vowel"}
         </h2>
-        <p className="text-sm text-gray-600 mb-4">Given: R, S, T, L, N, E</p>
-        <div className="grid grid-cols-6 gap-2 mb-4">
-          {LETTERS.map((letter) => {
-            const isVowel = VOWELS.has(letter);
-            const isGiven = bonusLetters.has(letter);
-            const isSelected = bonusConsonants.includes(letter) || bonusVowel === letter;
-            const isDisabled = isGiven || isSelected || (bonusLetterType === "consonant" && isVowel) || (bonusLetterType === "vowel" && !isVowel);
 
-            return (
+        <p className="text-sm text-gray-600 mb-4">Given: {GIVEN.join(", ")}</p>
+
+        {/* Selected row (click to unselect) */}
+        <div className="mb-4">
+          <div className="text-xs uppercase tracking-wide text-gray-500 mb-2">Selected</div>
+          <div className="flex gap-2 justify-center">
+            {isSelectingConsonants ? (
+              bonusConsonants.length > 0 ? (
+                bonusConsonants.map((c) => (
+                  <button
+                    key={c}
+                    onClick={() => unselectConsonant(c)}
+                    title={`Remove ${c}`}
+                    className="w-10 h-10 rounded-lg flex items-center justify-center bg-blue-500 text-white font-bold hover:opacity-90"
+                  >
+                    {c}
+                  </button>
+                ))
+              ) : (
+                <div className="text-sm text-gray-400">None yet</div>
+              )
+            ) : (
+              <>
+                {bonusVowel ? (
+                  <button
+                    onClick={unselectVowel}
+                    title={`Remove ${bonusVowel}`}
+                    className="w-10 h-10 rounded-lg flex items-center justify-center bg-blue-500 text-white font-bold hover:opacity-90"
+                  >
+                    {bonusVowel}
+                  </button>
+                ) : (
+                  <div className="text-sm text-gray-400">None yet</div>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* Pickable letters */}
+        <div className={pickContainerClass}>
+          {pickableLetters.length > 0 ? (
+            pickableLetters.map((letter) => (
               <button
                 key={letter}
                 onClick={() => handleBonusLetter(letter)}
-                disabled={isDisabled}
-                className={cls("w-10 h-10 rounded-lg text-sm font-bold",
-                  isDisabled ? "bg-gray-300 text-gray-500 cursor-not-allowed" : "bg-blue-500 text-white hover:bg-blue-600")}
+                className="w-10 h-10 rounded-lg text-sm font-bold bg-blue-500 text-white hover:bg-blue-600"
               >
                 {letter}
               </button>
-            );
-          })}
+            ))
+          ) : (
+            <div className="col-span-6 text-sm text-gray-500 py-6">No letters left to pick in this category.</div>
+          )}
         </div>
+
+     
       </div>
     </div>
   );
+};
+
 
   // INLINE Bonus Solve Panel (no overlay) — placed under board in the bonus phase render
   const BonusSolveInline = () => {
@@ -1872,13 +2258,19 @@ function finishPuzzle(solved, lastWedge) {
     const onKeyDown = (e) => {
       if (e.key === "Enter") {
         e.preventDefault();
+        //added stop propagation to prevent double submit
+         e.stopPropagation();
         handleBonusSolve();
       }
     };
 
     return (
       <div className="w-full max-w-3xl mx-auto mt-6 p-6 bg-white rounded-2xl shadow-lg">
-        <h2 className="text-xl sm:text-2xl font-bold text-black text-center">Solve for {bonusPrize}!</h2>
+        {/* added team name who won here */}
+    {/* <h1 className="text-lg font-bold text-center">{displayBonusPlayer}</h1> */}
+
+        <h2 className="text-xl sm:text-2xl font-bold text-black text-center">Solve to win {bonusPrize}!</h2>
+        
         <div className="flex flex-col items-center gap-3 mt-3">
           <div className="text-3xl font-black text-red-500">{bonusCountdown}</div>
           <p className="text-sm text-gray-600 text-center">
@@ -1929,9 +2321,17 @@ function finishPuzzle(solved, lastWedge) {
     <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-black/70">
       <div className="bg-white rounded-2xl p-8 w-full max-w-lg text-center shadow-xl">
         <h1 className="text-4xl font-black mb-2">BONUS ROUND</h1>
-        <p className="text-2xl font-semibold mb-6">Solve for <span className="uppercase">{bonusPrize}</span>!</p>
-        <div className="text-md text-gray-700 mb-6">
-          Letters have been revealed. Press <strong>READY</strong> when you're ready — the 20s countdown will start immediately.
+<p className="text-2xl font-semibold mb-6">
+  Solve to win <span className="uppercase">{bonusPrize}!</span>
+  <br />Good luck <span className="font-black">{displayBonusPlayer}</span>!
+</p>
+
+   {/* NEW: show given letters here */}
+      <p className="text-xl md:text-2xl text-gray-600 mb-6">
+         R S T L N E are given
+      </p>
+        <div className="text-xl md:text-2xl font-semibold text-gray-700 mb-6">
+        Press <strong>READY</strong> when you're ready. The 20 second countdown will start immediately.
         </div>
         <div className="flex items-center justify-center gap-4">
           <button
@@ -1953,7 +2353,7 @@ function finishPuzzle(solved, lastWedge) {
         {result === "win" ? (
           <>
             <h2 className="text-3xl font-bold mb-4 text-green-700">Congratulations!</h2>
-            <p className="text-lg text-black mb-2">You solved the bonus puzzle and won: <span className="font-extrabold">{bonusPrize}</span></p>
+            <p className="text-lg text-black mb-2">You solved the bonus puzzle and won a <span className="font-extrabold">{bonusPrize}</span></p>
           </>
         ) : (
           <>
@@ -2080,7 +2480,7 @@ function finishPuzzle(solved, lastWedge) {
       <div className={cls("fixed inset-0 z-[60] flex flex-col items-center justify-center overflow-auto p-4", GRADIENT)}>
         <div className="max-w-6xl w-full mx-auto text-center py-8">
           <h1 className="text-5xl font-black mb-2">BONUS ROUND</h1>
-          <p className="text-2xl mb-6">Playing for: {winners[0]}</p>
+      <p className="text-2xl mb-6"> Good luck: {displayBonusPlayer}</p>
 
           {/* Puzzle Board - hide while waiting READY */}
           {bonusState !== "prize_spin" && !bonusHideBoard && (
@@ -2117,7 +2517,7 @@ function finishPuzzle(solved, lastWedge) {
           {/* show spinner only when not selecting tie/letters/ready/countdown and not revealing letters */}
           {!showBonusSelector && !bonusAwaitingReady && !bonusActive && !bonusRevealing && (
             <div className="mt-8">
-              <p className="text-xl mb-6">Spin the wheel to see what prize you're playing for!</p>
+              <p className="text-xl mb-6">Click the button to see what prize you're playing for!</p>
 
               <button
                 onClick={startBonusRound}
@@ -2131,7 +2531,7 @@ function finishPuzzle(solved, lastWedge) {
                 ) : bonusPrize ? (
                   // show the landed prize after spin (disabled)
                   <span className="flex items-center gap-3">
-                    <span className="text-sm opacity-90">Prize:</span>
+                    <span className="text-sm opacity-90">Prize: A</span>
                     <span className="text-lg font-black uppercase">{bonusPrize}</span>
                   </span>
                 ) : (
@@ -2178,12 +2578,12 @@ function finishPuzzle(solved, lastWedge) {
             </div>
           )}
 
-          {bonusState === "letters" && !bonusAwaitingReady && !bonusHideBoard && (
+          {/* {bonusState === "letters" && !bonusAwaitingReady && !bonusHideBoard && (
             <div className="mt-6">
               <div className="text-6xl font-black mb-4 text-yellow-300">{bonusPrize}</div>
               <h1 className="text-xl mb-2">Letters being revealed — R S T L N E are given</h1>
             </div>
-          )}
+          )} */}
         </div>
 
         {showBonusSelector && <BonusWinnerSelectorModal />}
@@ -2278,6 +2678,22 @@ function finishPuzzle(solved, lastWedge) {
                     className="w-24 mt-1 px-3 py-2 rounded-xl bg-white/20 text-white font-semibold"
                   />
                 </div>
+                 <div>
+                  <label className="text-sm uppercase tracking-wider opacity-80" htmlFor="rounds-count-input">Number of Main Rounds</label>
+                  <input
+                    id="rounds-count-input"
+                    type="number"
+                    min="1"
+                    max={Math.max(1, puzzles.length || FALLBACK.length)}
+                    value={roundsCount}
+                    onChange={(e) => {
+                      const val = Math.max(1, Math.min(parseInt(e.target.value, 10) || 1, Math.max(1, puzzles.length || FALLBACK.length)));
+                      setRoundsCount(val);
+                    }}
+                    className="w-24 mt-1 px-3 py-2 rounded-xl bg-white/20 text-white font-semibold"
+                  />
+                  <div className="text-xs text-white/70 mt-1">Bonus round is always a single extra round</div>
+                </div>
                 <div className="flex-1 w-full">
                   <div className="text-sm uppercase tracking-wider opacity-80">Team Names</div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-1">
@@ -2302,7 +2718,6 @@ function finishPuzzle(solved, lastWedge) {
                   setActive(0);
                   setAngle(0);
                   setHasSpun(false);
-                  setPhase("play");
                   setZoomed(false);
                   setMysteryPrize(null);
                   setWonSpecialWedges([]);
@@ -2317,10 +2732,23 @@ function finishPuzzle(solved, lastWedge) {
                     incorrectGuesses: 0,
                     teamStats: {},
                   });
-                  setBonusResult(null);
+            setBonusResult(null);
                   setBonusWinnerName(null);
                   winnersRef.current = [];
                   setWinners([]);
+                     // --- SELECT RANDOM MAIN ROUNDS HERE ---
+                  const count = Math.max(1, Math.min(roundsCount, puzzles.length || FALLBACK.length));
+                  const chosen = selectRandomPuzzles(puzzles.length ? puzzles : FALLBACK, count);
+                  setSelectedPuzzles(chosen);
+
+                  // initialize first puzzle from chosen set
+                  setIdx(0);
+                  const first = chosen[0] || FALLBACK[0];
+                  setBoard(normalizeAnswer(first.answer));
+                  setCategory(first.category || "PHRASE");
+
+                  // go to play phase
+                  setPhase("play");
                 }} className="px-5 py-2 rounded-xl bg-white text-black font-bold hover:opacity-90 transition-opacity">Start Game</button>
                 <button onClick={sfx.toggleTheme} className="px-4 py-2 rounded-xl bg-white/20 hover:bg-white/30 font-semibold transition-colors">{sfx.themeOn ? "Music Off" : "Music On"}</button>
               </div>
@@ -2367,7 +2795,15 @@ function finishPuzzle(solved, lastWedge) {
 
   return (
     <div className={cls("min-h-screen h-screen text-white flex flex-col items-center p-4 overflow-hidden", GRADIENT)}>
-      <div className={cls("w-full h-full flex flex-col", (zoomed || showWinScreen) && "invisible")}>
+      {/* <div className={cls("w-full h-full flex flex-col", (zoomed || showWinScreen) && "invisible")}> */}
+        <div
+  className={cls(
+    "w-full h-full flex flex-col",
+    (zoomed || showWinScreen) && "invisible",
+    (isRevealingLetters || finishingRef.current) && "pointer-events-none select-none"
+  )}
+>
+
         <header className="w-full flex justify-between items-center max-w-7xl mx-auto">
           <div className="flex-1 flex justify-start">
             <button onClick={backToSetup} className="px-4 py-2 rounded-xl bg-white/20 hover:bg-white/30 text-sm font-semibold">← Setup</button>
@@ -2404,9 +2840,19 @@ function finishPuzzle(solved, lastWedge) {
                 <span className="select-none">SPIN (Hold)</span>
               </button>
 
-              <button onClick={() => setShowVowelModal(true)} disabled={!canBuyVowel} className={cls("px-6 py-3 rounded-xl font-bold text-lg", !canBuyVowel ? "bg-gray-700/60 text-gray-400 cursor-not-allowed" : "bg-blue-500 text-white hover:bg-blue-600")}>
+              {/* <button onClick={() => setShowVowelModal(true)} disabled={!canBuyVowel} className={cls("px-6 py-3 rounded-xl font-bold text-lg", !canBuyVowel ? "bg-gray-700/60 text-gray-400 cursor-not-allowed" : "bg-blue-500 text-white hover:bg-blue-600")}>
                 BUY VOWEL (${VOWEL_COST})
-              </button>
+              </button> */}
+              <button
+  onClick={() => setShowVowelModal(true)}
+  disabled={!canBuyVowel}
+  className={cls(
+    "px-6 py-3 rounded-xl font-bold text-lg",
+    !canBuyVowel ? "bg-gray-700/60 text-gray-400 cursor-not-allowed" : "bg-blue-500 text-white hover:bg-blue-600"
+  )}
+>
+  BUY VOWEL (${VOWEL_COST})
+</button>
               <button onClick={() => setShowSolveModal(true)} disabled={!canSolve} className={cls("px-6 py-3 rounded-xl font-bold text-lg", !canSolve ? "bg-gray-700/60 text-gray-400 cursor-not-allowed" : "bg-purple-500 text-white hover:bg-purple-600")}>
                 SOLVE
               </button>
@@ -2415,7 +2861,9 @@ function finishPuzzle(solved, lastWedge) {
             <div className="w-full max-w-2xl p-2">
               <div className="flex flex-wrap justify-center gap-2">
                 {LETTERS.map((ch) => (
-                  <button key={ch} onClick={() => guessLetter(ch)} disabled={!awaitingConsonant || VOWELS.has(ch) || letters.has(ch)} className={cls("w-9 h-9 sm:w-10 sm:h-10 rounded-md font-bold",
+                  <button key={ch} 
+                  onClick={() => guessLetter(ch)} 
+                  disabled={ isRevealingLetters || !awaitingConsonant || VOWELS.has(ch) || letters.has(ch)} className={cls("w-9 h-9 sm:w-10 sm:h-10 rounded-md font-bold",
                     VOWELS.has(ch) ? "bg-blue-800/60 text-blue-200" : letters.has(ch) ? "bg-gray-700/60 text-gray-400" : "bg-white/20 text-white",
                     awaitingConsonant && !VOWELS.has(ch) && !letters.has(ch) ? "hover:bg-white/30 hover:ring-2 hover:ring-white cursor-pointer" : "cursor-not-allowed"
                   )}>
@@ -2423,7 +2871,7 @@ function finishPuzzle(solved, lastWedge) {
                   </button>
                 ))}
               </div>
-              <div className="text-center mt-2 text-sm opacity-75">{awaitingConsonant ? "Click a consonant or use keyboard" : "Spin, buy a vowel, or solve"}</div>
+              <div className="text-center mt-2 text-sm opacity-75">{awaitingConsonant ? "Click a consonant" : "Spin, buy a vowel, or solve"}</div>
             </div>
           </div>
 
@@ -2472,6 +2920,20 @@ function finishPuzzle(solved, lastWedge) {
         )}
       </div>
 
+   
+{/* Block input while revealing letters or during finishingRef */}
+{(isRevealingLetters || finishingRef.current) && (
+  <div
+    className="fixed inset-0 z-[90] bg-transparent"
+    aria-hidden="true"
+    onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
+    onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
+    onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
+    onTouchStart={(e) => { e.preventDefault(); e.stopPropagation(); }}
+    style={{ pointerEvents: "auto" }}
+  />
+)}
+
       {showWinScreen && <WinScreen winner={roundWinner} />}
       {showVowelModal && <VowelModal />}
       {showSolveModal && <SolveModal />}
@@ -2485,3 +2947,4 @@ function finishPuzzle(solved, lastWedge) {
   );
 }
 
+/* End of updated component */
