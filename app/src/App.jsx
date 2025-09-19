@@ -711,6 +711,10 @@ export default function App() {
   const [bonusGuess, setBonusGuess] = useState("");
   const [showBonusSolveModal, setShowBonusSolveModal] = useState(false);
   const [showBonusSelector, setShowBonusSelector] = useState(false);
+  const [showBonusSpinner, setShowBonusSpinner] = useState(false);
+const [bonusSpinnerAngle, setBonusSpinnerAngle] = useState(0);
+const [bonusSpinnerSpinning, setBonusSpinnerSpinning] = useState(false);
+const bonusSpinnerRef = useRef(null);
   const [bonusWinnerSpinning, setBonusWinnerSpinning] = useState(false);
   const [selectedBonusWinner, setSelectedBonusWinner] = useState("");
   const [bonusResult, setBonusResult] = useState(null);
@@ -1052,9 +1056,12 @@ useEffect(() => () => {
     return () => window.removeEventListener("keydown", onEsc);
   }, []);
 
-  useEffect(() => {
-    requestAnimationFrame(() => drawWheel(angle));
-  }, [angle, wheelPx, phase, isFullscreen, isCharging, spinPower, zoomed, currentWedges]);
+useEffect(() => {
+  if (phase === "bonus" && bonusSpinnerRef.current && !bonusPrize) {
+    drawBonusWheel();
+  }
+  requestAnimationFrame(() => drawWheel(angle));
+}, [angle, wheelPx, phase, isFullscreen, isCharging, spinPower, zoomed, currentWedges, bonusSpinnerAngle, bonusPrize]);
 
   useEffect(() => () => {
     if (bonusPrepIntervalRef.current) {
@@ -1214,6 +1221,72 @@ useEffect(() => () => {
     ctx.fill();
     ctx.restore();
   }
+
+function drawBonusWheel() {
+  const canvas = bonusSpinnerRef.current;
+  if (!canvas) return;
+  
+  const ctx = canvas.getContext('2d');
+  const size = 400;
+  const centerX = size / 2;
+  const centerY = size / 2;
+  const radius = size / 2 - 40;
+  
+  canvas.width = size;
+  canvas.height = size;
+  
+  ctx.clearRect(0, 0, size, size);
+  
+  const sectionAngle = (Math.PI * 2) / BONUS_PRIZES.length;
+  const colors = ['#ff6b6b', '#4ecdc4', '#45b7d1', '#f9ca24', '#6c5ce7'];
+  
+  ctx.save();
+  ctx.translate(centerX, centerY);
+  ctx.rotate((bonusSpinnerAngle * Math.PI) / 180);
+  
+  BONUS_PRIZES.forEach((prize, index) => {
+    const startAngle = index * sectionAngle;
+    const endAngle = (index + 1) * sectionAngle;
+    
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.arc(0, 0, radius, startAngle, endAngle);
+    ctx.closePath();
+    ctx.fillStyle = colors[index % colors.length];
+    ctx.fill();
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+    
+    ctx.save();
+    ctx.rotate(startAngle + sectionAngle / 2);
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+   ctx.fillStyle = '#fff';
+ctx.font = 'bold 18px Arial Black, Impact, sans-serif';
+ctx.shadowColor = 'rgba(0,0,0,0.8)';
+ctx.shadowOffsetX = 2;
+ctx.shadowOffsetY = 2;
+ctx.shadowBlur = 3;
+    ctx.fillText(prize, radius * 0.3, 0);
+    ctx.restore();
+  });
+  
+  ctx.restore();
+  
+  // Draw pointer
+  ctx.beginPath();
+  ctx.moveTo(centerX, 30);
+  ctx.lineTo(centerX - 15, 60);
+  ctx.lineTo(centerX + 15, 60);
+  ctx.closePath();
+  ctx.fillStyle = '#ffd700';
+  ctx.fill();
+  ctx.strokeStyle = '#000';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+}
+
 
   function wedgeIndexForAngle(a) {
     const two = Math.PI * 2;
@@ -2138,43 +2211,98 @@ const passTurn = () => {
     }, 150);
   }
 
+  // function startBonusRound() {
+  //   setBonusPrize("");
+  //   setBonusHideBoard(true);
+  //   setBonusSpinning(true);
+  //   try { sfx.play("spin"); } catch (e) {}
+
+  //   let spinCount = 0;
+  //   const maxSpins = 30 + Math.floor(Math.random() * 20);
+
+  //   // clear any existing bonus spinner first
+  //   if (bonusSpinRef.current) {
+  //     clearInterval(bonusSpinRef.current);
+  //     bonusSpinRef.current = null;
+  //   }
+
+  //   bonusSpinRef.current = setInterval(() => {
+  //     setBonusPrize(BONUS_PRIZES[spinCount % BONUS_PRIZES.length]);
+  //     spinCount++;
+
+  //     if (spinCount >= maxSpins) {
+  //       // stop this bonus spinner
+  //       if (bonusSpinRef.current) {
+  //         clearInterval(bonusSpinRef.current);
+  //         bonusSpinRef.current = null;
+  //       }
+
+  //       const finalPrize = BONUS_PRIZES[Math.floor(Math.random() * BONUS_PRIZES.length)];
+  //       setBonusPrize(finalPrize);
+  //       setBonusSpinning(false);
+
+  //       setTimeout(() => {
+  //         setShowBonusLetterModal(true);
+  //         setBonusLetterType("consonant");
+  //       }, 600);
+  //     }
+  //   }, 100);
+  // }
+  
   function startBonusRound() {
-    setBonusPrize("");
-    setBonusHideBoard(true);
-    setBonusSpinning(true);
-    try { sfx.play("spin"); } catch (e) {}
+  setBonusPrize("");
+  setBonusHideBoard(true);
+  setShowBonusSpinner(true);
+}
 
-    let spinCount = 0;
-    const maxSpins = 30 + Math.floor(Math.random() * 20);
-
-    // clear any existing bonus spinner first
-    if (bonusSpinRef.current) {
-      clearInterval(bonusSpinRef.current);
-      bonusSpinRef.current = null;
+function spinBonusWheel() {
+  if (bonusSpinnerSpinning) return;
+  
+  setBonusSpinnerSpinning(true);
+  try { 
+    sfx.play("spin"); 
+  } catch (e) {}
+  
+  const spins = Math.floor(Math.random() * 5) + 8;
+  const finalRotation = Math.floor(Math.random() * 360);
+  const totalRotation = spins * 360 + finalRotation;
+  
+  const startTime = performance.now();
+  const duration = 4000;
+  const startAngle = bonusSpinnerAngle;
+  
+  const animate = (currentTime) => {
+    const elapsed = currentTime - startTime;
+    const progress = Math.min(elapsed / duration, 1);
+    
+    const easeOut = 1 - Math.pow(1 - progress, 3);
+    const currentAngle = startAngle + totalRotation * easeOut;
+    
+    setBonusSpinnerAngle(currentAngle);
+    
+    if (progress < 1) {
+      requestAnimationFrame(animate);
+    } else {
+      const normalizedRotation = (360 - (finalRotation % 360)) % 360;
+const prizeIndex = Math.floor(normalizedRotation / (360 / BONUS_PRIZES.length));
+const selectedPrize = BONUS_PRIZES[prizeIndex % BONUS_PRIZES.length];
+      
+      setBonusPrize(selectedPrize);
+      setBonusSpinnerSpinning(false);
+      
+      try { 
+        sfx.stop("spin"); 
+      } catch (e) {}
+      
+   setTimeout(() => {
+  setShowBonusLetterModal(true);
+  setBonusLetterType("consonant");
+}, 1500);
     }
-
-    bonusSpinRef.current = setInterval(() => {
-      setBonusPrize(BONUS_PRIZES[spinCount % BONUS_PRIZES.length]);
-      spinCount++;
-
-      if (spinCount >= maxSpins) {
-        // stop this bonus spinner
-        if (bonusSpinRef.current) {
-          clearInterval(bonusSpinRef.current);
-          bonusSpinRef.current = null;
-        }
-
-        const finalPrize = BONUS_PRIZES[Math.floor(Math.random() * BONUS_PRIZES.length)];
-        setBonusPrize(finalPrize);
-        setBonusSpinning(false);
-
-        setTimeout(() => {
-          setShowBonusLetterModal(true);
-          setBonusLetterType("consonant");
-        }, 600);
-      }
-    }, 100);
-  }
+  };
+  
+  requestAnimationFrame(animate);
+}
 
 
   function handleBonusLetter(letter) {
@@ -2566,7 +2694,122 @@ setGameStats({
     </div>
   );
 
-
+const BonusSpinnerModal = () => {
+  const canvasRef = useRef(null);
+  
+  useEffect(() => {
+    if (!showBonusSpinner) return;
+    
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    
+    const ctx = canvas.getContext('2d');
+    const size = 400;
+    const centerX = size / 2;
+    const centerY = size / 2;
+    const radius = size / 2 - 40;
+    
+    canvas.width = size;
+    canvas.height = size;
+    
+    ctx.clearRect(0, 0, size, size);
+    
+    const sectionAngle = (Math.PI * 2) / BONUS_PRIZES.length;
+const colors = ['#ff6b6b', '#4ecdc4', '#45b7d1', '#f9ca24', '#6c5ce7'];
+    
+    ctx.save();
+    ctx.translate(centerX, centerY);
+    ctx.rotate((bonusSpinnerAngle * Math.PI) / 180);
+    
+    BONUS_PRIZES.forEach((prize, index) => {
+      const startAngle = index * sectionAngle;
+      const endAngle = (index + 1) * sectionAngle;
+      
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.arc(0, 0, radius, startAngle, endAngle);
+      ctx.closePath();
+      ctx.fillStyle = colors[index % colors.length];
+      ctx.fill();
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 3;
+      ctx.stroke();
+      
+      ctx.save();
+      ctx.rotate(startAngle + sectionAngle / 2);
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 14px Arial';
+      ctx.shadowColor = 'rgba(0,0,0,0.5)';
+      ctx.shadowOffsetX = 1;
+      ctx.shadowOffsetY = 1;
+      ctx.fillText(prize, radius * 0.3, 0);
+      ctx.restore();
+    });
+    
+    ctx.restore();
+    
+    ctx.beginPath();
+    ctx.moveTo(centerX, 30);
+    ctx.lineTo(centerX - 15, 60);
+    ctx.lineTo(centerX + 15, 60);
+    ctx.closePath();
+    ctx.fillStyle = '#ffd700';
+    ctx.fill();
+    ctx.strokeStyle = '#000';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, 30, 0, Math.PI * 2);
+    ctx.fillStyle = '#fff';
+    ctx.fill();
+    ctx.strokeStyle = '#000';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+    
+  }, [bonusSpinnerAngle]);
+  
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/80">
+      <div className="bg-white rounded-3xl p-8 w-full max-w-2xl text-center shadow-2xl">
+        <h1 className="text-4xl font-black mb-4 text-black">BONUS ROUND</h1>
+        <p className="text-xl font-semibold mb-6 text-gray-700">
+          Good luck: <span className="text-blue-600">{displayBonusPlayer}</span>!
+        </p>
+        <p className="text-lg text-gray-600 mb-6">Spin the wheel to see what prize you're playing for!</p>
+        
+        <div className="flex justify-center mb-6">
+          <canvas 
+            ref={canvasRef}
+            className="drop-shadow-2xl"
+            style={{ width: '400px', height: '400px' }}
+          />
+        </div>
+        
+        <button
+          onClick={spinBonusWheel}
+          disabled={bonusSpinnerSpinning || bonusPrize}
+          className={`px-8 py-4 rounded-2xl text-xl font-extrabold text-white transition-all duration-300 ${
+            bonusSpinnerSpinning || bonusPrize
+              ? 'bg-gray-400 cursor-not-allowed'
+              : 'bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 hover:scale-105 shadow-lg'
+          }`}
+        >
+          {bonusSpinnerSpinning ? 'SPINNING...' : bonusPrize ? `YOU'RE PLAYING FOR: ${bonusPrize}` : 'SPIN FOR PRIZE'}
+        </button>
+        
+        {bonusPrize && (
+          <div className="mt-6 p-4 bg-gradient-to-r from-yellow-100 to-orange-100 rounded-xl">
+            <div className="text-2xl font-black text-gray-800 mb-2">🎉 CONGRATULATIONS! 🎉</div>
+            <div className="text-lg text-gray-700">You're playing for: <span className="font-bold text-purple-600">{bonusPrize}</span></div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
 
 const BonusLetterModal = () => {
   const GIVEN = ["R", "S", "T", "L", "N", "E"];
@@ -3073,6 +3316,109 @@ const BonusResultModal = ({ result }) => {
 );
 
   // Render branches
+
+// Replace the entire bonus round section (starting with if (phase === "bonus")) with this:
+
+// if (phase === "bonus") {
+//   const bonusState = bonusActive ? "countdown" : (bonusPrize ? (bonusAwaitingReady ? "ready" : "letters") : "prize_spin");
+//   return (
+//     <div className={cls("fixed inset-0 z-[60] flex flex-col items-center justify-center overflow-auto p-4", GRADIENT)}>
+//       <PersistentHeader
+//         sfx={sfx}
+//         phase={phase}
+//         backToSetup={backToSetup}
+//         toggleFullscreen={toggleFullscreen}
+//         awaitingConsonant={awaitingConsonant}
+//         zoomed={zoomed}
+//         landed={landed}
+//         spinning={spinning}
+//         showSolveModal={showSolveModal}
+//         showWinScreen={showWinScreen}
+//         bonusReadyModalVisible={bonusReadyModalVisible}
+//         bonusResult={bonusResult}
+//         showStats={showStats}
+//         showBonusLetterModal={showBonusLetterModal}
+//         showBonusSelector={showBonusSelector}
+//         bonusActive={bonusActive}
+//         bonusRevealing={bonusRevealing}
+//         bonusAwaitingReady={bonusAwaitingReady}
+//         isFullscreen={isFullscreen}
+//         showBonusSolveModal={showBonusSolveModal}
+//         bonusSpinning={bonusSpinning}
+//         showMysterySpinner={showMysterySpinner}
+//       />
+      
+//       {/* Prize Spin State - Show wheel and spin button */}
+//       {bonusState === "prize_spin" && !showBonusSelector && !showBonusSpinner && (
+//   <div className="max-w-7xl w-full mx-auto text-center py-8 flex flex-col items-center justify-center min-h-screen">
+//     <div className="mb-8">
+//       <h1 className="text-6xl font-black mb-4 text-white [text-shadow:0_8px_16px_rgba(0,0,0,0.5)]">🎊 BONUS ROUND 🎊</h1>
+//       <p className="text-3xl font-bold text-yellow-300 [text-shadow:0_4px_8px_rgba(0,0,0,0.5)]">Good luck: {displayBonusPlayer}!</p>
+//       <p className="text-xl text-white/90 mt-4">Click the button to see what prize you're playing for!</p>
+//     </div>
+    
+//     <button 
+//       onClick={startBonusRound} 
+//       className="px-12 py-6 rounded-2xl bg-gradient-to-r from-purple-500 to-pink-500 text-white font-extrabold text-2xl hover:from-purple-600 hover:to-pink-600 hover:scale-105 transform transition-all duration-300 shadow-2xl animate-pulse"
+//     >
+//       🎁 SPIN FOR PRIZE 🎁
+//     </button>
+//   </div>
+// )}
+      
+//       {/* Other bonus states */}
+//       {bonusState !== "prize_spin" && (
+//         <div className="max-w-6xl w-full mx-auto text-center py-8">
+//           <h1 className="text-5xl font-black mb-2">BONUS ROUND</h1>
+//           <p className="text-2xl mb-6">Good luck: {displayBonusPlayer}</p>
+//           {!bonusHideBoard && (
+//             <div className="my-6">
+//               <h2 className="text-2xl font-bold tracking-widest uppercase text-center mb-3">{category}</h2>
+//               <div className="flex flex-wrap justify-center gap-2 p-4 rounded-xl backdrop-blur-md bg-white/10 w-full max-w-4xl mx-auto">
+//                 {wordTokens.map((tok, i) => {
+//                   if (tok.type === "space") return <div key={i} className="w-4 h-10 sm:h-14 flex-shrink-0" />;
+//                   return (
+//                     <div key={i} className="flex gap-2">
+//                       {tok.cells.map((cell, j) => {
+//                         const isSpecial = !isLetter(cell.ch);
+//                         return (
+//                           <div key={`${i}-${j}`} className={cls("w-10 h-12 sm:w-12 sm:h-16 text-2xl sm:text-3xl font-extrabold flex items-center justify-center rounded-md select-none", cell.shown ? "bg-yellow-300 text-black shadow-md" : "bg-blue-900/90 text-white", isSpecial && "bg-transparent text-white")}>
+//                             {isSpecial ? cell.ch : (cell.shown ? cell.ch : "")}
+//                           </div>
+//                         );
+//                       })}
+//                     </div>
+//                   );
+//                 })}
+//               </div>
+//             </div>
+//           )}
+//           {bonusState === "letters" && bonusAwaitingReady && !bonusReadyModalVisible && (
+//             <div className="my-8 flex flex-col items-center gap-6">
+//               <div className="text-5xl font-black text-yellow-300">{bonusPrize}</div>
+//               <p className="text-lg">Letters revealed. Press READY when you're ready to begin the 20s countdown.</p>
+//               <button onClick={() => { setBonusReadyModalVisible(true); }} disabled={readyDisabled || bonusActive} className={cls("px-16 py-6 text-3xl rounded-2xl bg-green-500 text-white font-extrabold shadow-lg transition-transform focus:outline-none", (readyDisabled || bonusActive) ? "opacity-60 cursor-not-allowed transform-none" : "hover:bg-green-600 hover:scale-105 animate-pulse")} aria-disabled={readyDisabled || bonusActive}>READY</button>
+//             </div>
+//           )}
+//           {bonusReadyModalVisible && <BonusReadyModal />}
+//           {showBonusSolveModal && <BonusSolveInline />}
+//           {bonusState === "countdown" && (
+//             <div className="mt-6 flex flex-col items-center gap-4">
+//               {!showBonusSolveModal && !bonusHideBoard && <div className="mt-4"><button onClick={() => setShowBonusSolveModal(true)} className="px-6 py-3 rounded-xl bg-blue-500 text-white">Open Solve Box</button></div>}
+//             </div>
+//           )}
+//         </div>
+//       )}
+      
+//       {showBonusSelector && <BonusWinnerSelectorModal />}
+//       {showBonusSpinner && <BonusSpinnerModal />}
+//       {showBonusLetterModal && <BonusLetterModal />}
+//       {bonusResult && <BonusResultModal result={bonusResult} />}
+//       <ConfettiCanvas trigger={bonusResult === 'win'} />
+//     </div>
+//   );
+// }
+
 if (phase === "bonus") {
   const bonusState = bonusActive ? "countdown" : (bonusPrize ? (bonusAwaitingReady ? "ready" : "letters") : "prize_spin");
   return (
@@ -3101,10 +3447,52 @@ if (phase === "bonus") {
         bonusSpinning={bonusSpinning}
         showMysterySpinner={showMysterySpinner}
       />
-      <div className="max-w-6xl w-full mx-auto text-center py-8">
+      
+      {/* Prize Spin State - Show bonus wheel and spin button */}
+      {bonusState === "prize_spin" && !showBonusSelector && (
+        <div className="max-w-7xl w-full mx-auto text-center py-8 flex flex-col items-center justify-center min-h-screen">
+          <div className="mb-8">
+            <h1 className="text-6xl font-black mb-4 text-white [text-shadow:0_8px_16px_rgba(0,0,0,0.5)]">🎊 BONUS ROUND 🎊</h1>
+            <p className="text-3xl font-bold text-yellow-300 [text-shadow:0_4px_8px_rgba(0,0,0,0.5)]">Good luck: {displayBonusPlayer}!</p>
+            <p className="text-xl text-white/90 mt-4">Spin the wheel to see what prize you're playing for!</p>
+          </div>
+          
+          {/* Bonus Prize Wheel */}
+          <div className="relative mb-8">
+            <canvas 
+              ref={bonusSpinnerRef} 
+              className="drop-shadow-2xl"
+              style={{ width: '400px', height: '400px' }}
+            />
+          </div>
+          
+          <button 
+            onClick={spinBonusWheel}
+            disabled={bonusSpinnerSpinning || bonusPrize}
+            className={`px-12 py-6 rounded-2xl text-2xl font-extrabold text-white transition-all duration-300 ${
+              bonusSpinnerSpinning || bonusPrize
+                ? 'bg-gray-400 cursor-not-allowed'
+                : 'bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 hover:scale-105 shadow-2xl animate-pulse'
+            }`}
+          >
+            {bonusSpinnerSpinning ? 'SPINNING...' : bonusPrize ? `YOU'RE PLAYING FOR: ${bonusPrize}` : '🎁 SPIN FOR PRIZE 🎁'}
+          </button>
+          
+          {bonusPrize && (
+            <div className="mt-6 p-4 bg-gradient-to-r from-yellow-100 to-orange-100 rounded-xl">
+              <div className="text-2xl font-black text-gray-800 mb-2">🎉 CONGRATULATIONS! 🎉</div>
+              <div className="text-lg text-gray-700">You're playing for: <span className="font-bold text-purple-600">{bonusPrize}</span></div>
+            </div>
+          )}
+        </div>
+      )}
+      
+      {/* Other bonus states */}
+  {bonusState === "countdown" && !bonusHideBoard && (
+        <div className="max-w-6xl w-full mx-auto text-center py-8">
           <h1 className="text-5xl font-black mb-2">BONUS ROUND</h1>
           <p className="text-2xl mb-6">Good luck: {displayBonusPlayer}</p>
-          {bonusState !== "prize_spin" && !bonusHideBoard && (
+          {bonusState === "countdown" && !bonusHideBoard && (
             <div className="my-6">
               <h2 className="text-2xl font-bold tracking-widest uppercase text-center mb-3">{category}</h2>
               <div className="flex flex-wrap justify-center gap-2 p-4 rounded-xl backdrop-blur-md bg-white/10 w-full max-w-4xl mx-auto">
@@ -3126,14 +3514,6 @@ if (phase === "bonus") {
               </div>
             </div>
           )}
-          {!showBonusSelector && !bonusAwaitingReady && !bonusActive && !bonusRevealing && (
-            <div className="mt-8">
-              <p className="text-xl mb-6">Click the button to see what prize you're playing for!</p>
-              <button onClick={startBonusRound} disabled={bonusSpinning || (!!bonusPrize && !bonusSpinning)} className="px-8 py-4 rounded-xl bg-purple-500 text-white font-bold text-xl hover:bg-purple-600 disabled:bg-gray-500">
-                {bonusSpinning ? (bonusPrize || "Spinning...") : bonusPrize ? (<span className="flex items-center gap-3"><span className="text-sm opacity-90">Prize:</span><span className="text-lg font-black uppercase">{bonusPrize}</span></span>) : ("SPIN FOR PRIZE")}
-              </button>
-            </div>
-          )}
           {bonusState === "letters" && bonusAwaitingReady && !bonusReadyModalVisible && (
             <div className="my-8 flex flex-col items-center gap-6">
               <div className="text-5xl font-black text-yellow-300">{bonusPrize}</div>
@@ -3149,13 +3529,15 @@ if (phase === "bonus") {
             </div>
           )}
         </div>
-        {showBonusSelector && <BonusWinnerSelectorModal />}
-        {showBonusLetterModal && <BonusLetterModal />}
-        {bonusResult && <BonusResultModal result={bonusResult} />}
-          <ConfettiCanvas trigger={bonusResult === 'win'} />
-      </div>
-    );
-  }
+      )}
+      
+      {showBonusSelector && <BonusWinnerSelectorModal />}
+      {showBonusLetterModal && <BonusLetterModal />}
+      {bonusResult && <BonusResultModal result={bonusResult} />}
+      <ConfettiCanvas trigger={bonusResult === 'win'} />
+    </div>
+  );
+}
 
   if (phase === "done") {
     const sorted = [...teams].sort((a, b) => b.total - a.total);
