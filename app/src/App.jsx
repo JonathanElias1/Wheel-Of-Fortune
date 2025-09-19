@@ -3290,6 +3290,10 @@ setSelectedPuzzles(chosen);
   setPhase("play");
 };
 
+// Initialize gameStats safely for setup (no `first` reference)
+
+
+
     return (
       <div className={cls("min-h-screen h-screen text-white flex items-center justify-center p-4 sm:p-6", GRADIENT)}>
         <PersistentHeader />
