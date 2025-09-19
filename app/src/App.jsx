@@ -43,6 +43,53 @@ const BONUS_PRIZES = ["PIN", "STICKER", "T-SHIRT", "MAGNET", "KEYCHAIN"];
 const SOLVE_REVEAL_INTERVAL = 650;
 
 
+function useImagePreloader() {
+  const [imagesLoaded, setImagesLoaded] = useState(false);
+  
+  useEffect(() => {
+    // List of all images used in your game
+    const imagePaths = [
+      '/hub-image.png',
+      '/winner-icon.png'
+      // Add any other images your game uses here
+    ];
+    
+    if (imagePaths.length === 0) {
+      setImagesLoaded(true);
+      return;
+    }
+    
+    let loadedCount = 0;
+    const totalImages = imagePaths.length;
+    
+    const onImageLoad = () => {
+      loadedCount++;
+      if (loadedCount === totalImages) {
+        setImagesLoaded(true);
+      }
+    };
+    
+    const onImageError = (path) => {
+      console.warn(`Failed to load image: ${path}`);
+      loadedCount++; // Still count as "loaded" to prevent hanging
+      if (loadedCount === totalImages) {
+        setImagesLoaded(true);
+      }
+    };
+    
+    // Preload all images
+    imagePaths.forEach(path => {
+      const img = new Image();
+      img.onload = onImageLoad;
+      img.onerror = () => onImageError(path);
+      img.src = path;
+    });
+    
+  }, []);
+  
+  return imagesLoaded;
+}
+
 function useSfx() {
   const audioCtxRef = useRef(null);
   const bufferMapRef = useRef({});       // key -> AudioBuffer
@@ -53,7 +100,10 @@ function useSfx() {
   const [volume, setVolume] = useState(0.9);
   const [themeOn, setThemeOn] = useState(false);
   const [loaded, setLoaded] = useState(false); // true when initial decode settled
+
   
+
+
 
   // list of files to decode (key -> filename)
   const base = "/";
@@ -455,6 +505,8 @@ function ConfettiCanvas({ trigger }) {
   const ref = useRef(null);
   const rafRef = useRef(null);
   useEffect(() => {
+       // Only run the confetti animation if the trigger is true
+    if (!trigger) return;
     const canvas = ref.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
@@ -468,7 +520,10 @@ function ConfettiCanvas({ trigger }) {
     // generate particles
     const colors = ["#FFD700", "#FF5E5E", "#5EE3FF", "#9B8CFF", "#6EE7B7"];
     const particles = [];
-    const count = 90;
+    
+    // MODIFIED: Increased particle count
+    const count = 200; 
+
     for (let i = 0; i < count; i++) {
       particles.push({
         x: window.innerWidth / 2 + (Math.random() - 0.5) * 200,
@@ -479,7 +534,9 @@ function ConfettiCanvas({ trigger }) {
         rotation: Math.random() * Math.PI * 2,
         vr: (Math.random() - 0.5) * 0.2,
         color: colors[Math.floor(Math.random() * colors.length)],
-        life: 120 + Math.floor(Math.random() * 60),
+        
+        // MODIFIED: Increased particle lifespan for a longer effect
+        life: 240 + Math.floor(Math.random() * 100), 
       });
     }
 
@@ -521,8 +578,49 @@ function ConfettiCanvas({ trigger }) {
 }
 
 
+// Paste this code ABOVE your App component
 
+const PersistentHeader = ({ sfx, phase, backToSetup, toggleFullscreen, awaitingConsonant, zoomed, landed, spinning, showSolveModal, showWinScreen, bonusReadyModalVisible, bonusResult, showStats, showBonusLetterModal, showBonusSelector, bonusActive, bonusRevealing, bonusAwaitingReady, isFullscreen, showBonusSolveModal, bonusSpinning, showMysterySpinner }) => {
+  const isPostSpinConsonantOverlay = !!awaitingConsonant && !!zoomed && landed != null;
+  const isBonusPrizeSpin = phase === "bonus" && !bonusActive && !bonusRevealing && !bonusAwaitingReady && !showBonusSelector;
+  const shouldHideHeader = !!showSolveModal || !!spinning || isPostSpinConsonantOverlay || !!showWinScreen || !!bonusReadyModalVisible || !!bonusResult || !!showStats || !!showBonusLetterModal || !!showBonusSelector || isBonusPrizeSpin || !!showBonusSolveModal || !!bonusSpinning || !!showMysterySpinner || !!zoomed;
 
+  if (shouldHideHeader) return null;
+
+  return (
+    <div className="fixed top-4 left-4 right-4 z-[100] flex items-center justify-between gap-3 pointer-events-auto">
+      <div className="flex items-center gap-3">
+        {phase !== "setup" && (
+          <button
+            onClick={backToSetup}
+            className="px-3 py-2 rounded-lg bg-white/10 backdrop-blur-sm border border-white/10 text-sm font-semibold shadow-sm hover:scale-[1.02] hover:bg-white/20 transition transform custom-hover"
+            aria-label="Back to setup"
+          >
+            ← Setup
+          </button>
+        )}
+      </div>
+      <div className="flex items-center gap-3 ml-4 mr-4 justify-end">
+        <button
+          onClick={sfx.toggleTheme}
+          className="px-3 py-2 rounded-lg bg-gradient-to-r from-white/10 to-white/5 border border-white/10 text-sm font-semibold flex items-center gap-2 hover:scale-[1.03] hover:bg-white/20 transition custom-hover"
+          aria-pressed={sfx.themeOn}
+          title={sfx.themeOn ? "Turn music off" : "Turn music on"}
+        >
+          <span className="text-lg">{sfx.themeOn ? "🔊" : "🔈"}</span>
+          <span className="hidden sm:inline">{sfx.themeOn ? "Music On" : "Music Off"}</span>
+        </button>
+        <div className="flex items-center gap-2 bg-white/10 px-3 py-2 rounded-lg">
+          <label htmlFor="global-volume" className="sr-only">Volume</label>
+          <input id="global-volume" type="range" min="0" max="1" step="0.01" value={sfx.volume} onChange={(e) => sfx.setVolume(parseFloat(e.target.value))} className="w-36" aria-label="Global volume" />
+        </div>
+        <button onClick={toggleFullscreen} className="px-3 py-2 rounded-lg bg-white/10 border border-white/10 text-sm font-semibold hover:scale-[1.03] hover:bg-white/20 transition custom-hover" title={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"} aria-pressed={isFullscreen}>
+          Fullscreen
+        </button>
+      </div>
+    </div>
+  );
+};
 
 export default function App() {
   const [phase, setPhase] = useState("setup");
@@ -750,6 +848,8 @@ useEffect(() => {
 
 
   const sfx = useSfx();
+const imagesLoaded = useImagePreloader(); // ADD THIS LINE
+
 
   const displayBonusPlayer = useMemo(() => {
     if (bonusWinnerSpinning) return selectedBonusWinner || "?";
@@ -1151,104 +1251,7 @@ useEffect(() => () => {
     return normalizedAngle;
   }
 
-  
 
-//   if (isRevealingLetters || finishingRef.current) return;
-//   if (!canSpin || isCharging) return;
-
-//   // immediate sync flag flip
-//   setIsCharging(true);
-//   isChargingRef.current = true;
-//   setSnapChargeToZero(true);
-//   setSpinPower(0);
-//   chargeSnapshotRef.current = 0;
-//   chargeDirRef.current = 1;
-//   setChargeSession((s) => s + 1);
-
-//   // stop any leftover timeouts/intervals
-//   if (chargeLoopTimeoutRef.current) {
-//     clearTimeout(chargeLoopTimeoutRef.current);
-//     chargeLoopTimeoutRef.current = null;
-//   }
-//   if (chargeIntervalRef.current) {
-//     clearInterval(chargeIntervalRef.current);
-//     chargeIntervalRef.current = null;
-//   }
-
-//   // Start the sound immediately and set it to loop right away.
-//   // use sfx.loop which sets a.loop = true and plays if paused.
-//   // This avoids pausing/resetting which causes audible gaps.
-//   try {
-//     sfx.play("chargeUp");      // ensure it begins
-//     sfx.loop("chargeUp");      // make it loop — loop() won't restart if already playing
-//   } catch (e) {
-//     // fail gracefully; still continue the UI charging
-//     console.error("Charge sound start failed:", e);
-//   }
-
-//   // Start the UI charge animation/interval
-//   requestAnimationFrame(() => {
-//     setSnapChargeToZero(false);
-//     const stepMs = 16;
-//     const stepDelta = 1;
-//     chargeIntervalRef.current = setInterval(() => {
-//       setSpinPower((prev) => {
-//         let next = prev + stepDelta * chargeDirRef.current;
-//         if (next >= 100) {
-//           next = 100;
-//           chargeDirRef.current = -1;
-//         } else if (next <= 0) {
-//           next = 0;
-//           chargeDirRef.current = 1;
-//         }
-//         chargeSnapshotRef.current = next;
-//         return next;
-//       });
-//     }, stepMs);
-//   });
-// };
-
-// const endCharge = () => {
-//   // ensure no stale timeout remains
-//   if (chargeLoopTimeoutRef.current) {
-//     clearTimeout(chargeLoopTimeoutRef.current);
-//     chargeLoopTimeoutRef.current = null;
-//   }
-
-//   // stop UI interval
-//   if (chargeIntervalRef.current) {
-//     clearInterval(chargeIntervalRef.current);
-//     chargeIntervalRef.current = null;
-//   }
-
-//   // update ref ASAP — synchronous source of truth
-//   const wasCharging = isChargingRef.current;
-//   isChargingRef.current = false;
-
-//   // stop looped sound cleanly (stopLoop will turn loop off and pause/reset)
-//   try {
-//     sfx.stopLoop("chargeUp");
-//   } catch (e) {
-//     try { sfx.stop("chargeUp"); } catch (err) {}
-//   }
-
-//   // If we never actually started charging (race), just bail
-//   if (!wasCharging) return;
-
-//   // use the snapshot (keeps behavior deterministic even if React state lags)
-//   const power = Math.max(1, Math.round(chargeSnapshotRef.current || 0));
-//   chargeSnapshotRef.current = 0;
-
-//   setIsCharging(false);
-//   setSnapChargeToZero(true);
-//   setSpinPower(0);
-
-//   // small rAF to clear the snap flag
-//   requestAnimationFrame(() => setSnapChargeToZero(false));
-
-//   // finally begin the spin action
-//   onSpin(power);
-// };
 // Make sure the function that calls startCharge can handle async (pointerdown handlers can call it)
 const startCharge = async () => {
   if (isRevealingLetters || finishingRef.current) return;
@@ -1286,7 +1289,7 @@ const startCharge = async () => {
   requestAnimationFrame(() => {
     setSnapChargeToZero(false);
     const stepMs = 16;
-    const stepDelta = 1;
+    const stepDelta = 5.7;
     // clear existing to be safe
     if (chargeIntervalRef.current) {
       clearInterval(chargeIntervalRef.current);
@@ -1371,6 +1374,8 @@ setGameStats((prev) => {
     ...prev,
     totalSpins: prev.totalSpins + 1,
     wedgeStats: newWedgeStats,
+        // ensure turnStartTime is set at the start of a turn (if it wasn't already)
+    turnStartTime: prev.turnStartTime || Date.now(),
     teamStats: {
       ...prev.teamStats,
       [currentTeamNameForStats]: { 
@@ -1977,42 +1982,52 @@ const WIN_SHOW_DELAY=300
   }
 
 
-function passTurn() {
-    if (!teams || teams.length === 0) {
-      setAwaitingConsonant(false);
-      return;
-    }
-    
-    // Track turn timing
-    if (gameStats.turnStartTime) {
-      const turnDuration = Date.now() - gameStats.turnStartTime;
-      const currentTeamName = teams[active]?.name ?? `Team ${active + 1}`;
-      
-      setGameStats(prev => {
-        const prevTeam = prev.teamStats[currentTeamName] || {};
-        return {
-          ...prev,
-          totalTurnTime: prev.totalTurnTime + turnDuration,
-          turnCount: prev.turnCount + 1,
-          turnStartTime: Date.now(),
-          teamStats: {
-            ...prev.teamStats,
-            [currentTeamName]: {
-              ...prevTeam,
-              totalTurnTime: (prevTeam.totalTurnTime || 0) + turnDuration,
-              avgTurnTime: Math.round(((prevTeam.totalTurnTime || 0) + turnDuration) / Math.max(1, (prevTeam.totalTurns || 0) + 1))
-            }
-          }
-        };
-      });
-    } else {
-      setGameStats(prev => ({ ...prev, turnStartTime: Date.now() }));
-    }
-    
-    setActive((a) => nextIdx(a, teams.length));
+const passTurn = () => {
+  if (!teams || teams.length === 0) {
     setAwaitingConsonant(false);
+    return;
   }
 
+  const startTs = gameStats?.turnStartTime;
+  const currentTeamName = teams[active]?.name ?? `Team ${active + 1}`;
+
+  if (startTs && Number.isFinite(startTs)) {
+    const turnDuration = Date.now() - startTs;
+
+    setGameStats((prev) => {
+      const prevTeam = prev.teamStats?.[currentTeamName] || {};
+      const newTeamTotalTurnTime = (prevTeam.totalTurnTime || 0) + turnDuration;
+      
+      // FIX: Add a new counter for completed turns
+      const newTeamCompletedTurns = (prevTeam.completedTurns || 0) + 1;
+
+      return {
+        ...prev,
+        totalTurnTime: (prev.totalTurnTime || 0) + turnDuration,
+        turnCount: (prev.turnCount || 0) + 1,
+        turnStartTime: null, // Reset for the next turn
+        teamStats: {
+          ...prev.teamStats,
+          [currentTeamName]: {
+            ...prevTeam,
+            totalTurnTime: newTeamTotalTurnTime,
+            completedTurns: newTeamCompletedTurns, // Store the new turn count
+            // FIX: Use the correct divisor
+            avgTurnTime: Math.round(newTeamTotalTurnTime / newTeamCompletedTurns),
+          },
+        },
+      };
+    });
+  } else {
+    // This case likely happens at the start of a turn that doesn't involve a spin
+    setGameStats((prev) => ({ ...prev, turnStartTime: Date.now() }));
+  }
+
+  // Rotate active player & reset awaiting state
+  setActive((a) => nextIdx(a, teams.length));
+  setAwaitingConsonant(false);
+};
+    
   function nextPuzzle() {
     finishingRef.current = false;
 
@@ -2495,48 +2510,6 @@ setGameStats({
     );
   };
 
-  const PersistentHeader = () => {
-    const isPostSpinConsonantOverlay = !!awaitingConsonant && !!zoomed && landed != null;
-    const isBonusPrizeSpin = phase === "bonus" && !bonusActive && !bonusRevealing && !bonusAwaitingReady && !showBonusSelector;
-      // *** Fixed: include zoomed here so header hides during zoom overlay ***
-    const shouldHideHeader = !!showSolveModal || !!spinning || isPostSpinConsonantOverlay || !!showWinScreen || !!bonusReadyModalVisible || !!bonusResult || !!showStats || !!showBonusLetterModal || !!showBonusSelector || isBonusPrizeSpin || !!showBonusSolveModal || !!bonusSpinning || !!showMysterySpinner || !!zoomed;
-    if (shouldHideHeader) return null;
-    return (
-      <div className="fixed top-4 left-4 right-4 z-[80] flex items-center justify-between gap-3 pointer-events-auto">
-        <div className="flex items-center gap-3">
-          {/* Hide the setup/back button while on the setup screen */}
-          {phase !== "setup" && (
-            <button
-              onClick={backToSetup}
-              className="px-3 py-2 rounded-lg bg-white/10 backdrop-blur-sm border border-white/10 text-sm font-semibold shadow-sm hover:scale-[1.02] transition transform custom-hover"
-              aria-label="Back to setup"
-            >
-              ← Setup
-            </button>
-          )}
-        </div>
-        
-        <div className="flex items-center gap-3 ml-4 mr-4 justify-end">
-          <button 
-          onClick={sfx.toggleTheme}
-            className="px-3 py-2 rounded-lg bg-gradient-to-r from-white/10 to-white/5 border border-white/10 text-sm font-semibold flex items-center gap-2 hover:brightness-105 transition custom-hover"
-            aria-pressed={sfx.themeOn}
-            title={sfx.themeOn ? "Turn music off" : "Turn music on"}
-          >
-            <span className="text-lg">{sfx.themeOn ? "🔊" : "🔈"}</span>
-            <span className="hidden sm:inline">{sfx.themeOn ? "Music On" : "Music Off"}</span>
-            </button>
-          <div className="flex items-center gap-2 bg-white/10 px-3 py-2 rounded-lg">
-            <label htmlFor="global-volume" className="sr-only">Volume</label>
-            <input id="global-volume" type="range" min="0" max="1" step="0.01" value={sfx.volume} onChange={(e) => sfx.setVolume(parseFloat(e.target.value))} className="w-36" aria-label="Global volume" />
-          </div>
- <button onClick={toggleFullscreen} className="px-3 py-2 rounded-lg bg-white/10 border border-white/10 text-sm font-semibold hover:scale-[1.03] transition custom-hover" title={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"} aria-pressed={isFullscreen}>
-            Fullscreen
-          </button>
-        </div>
-      </div>
-    );
-  };
 
   const VowelModal = () => (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80">
@@ -3012,7 +2985,15 @@ const BonusResultModal = ({ result }) => {
             <div className="text-2xl font-bold text-purple-600">
               {gameStats.turnCount > 0 ? Math.round(gameStats.totalTurnTime / gameStats.turnCount / 1000) + "s" : "N/A"}
             </div>
-            <div className="text-sm">Avg Turn Time</div>
+           <div className="bg-gray-100 p-4 rounded-lg">
+  <div className="text-2xl font-bold text-purple-600">
+    {Number.isFinite(gameStats.totalTurnTime) && (gameStats.turnCount || 0) > 0
+      ? Math.round((gameStats.totalTurnTime || 0) / (gameStats.turnCount || 1) / 1000) + "s"
+      : "N/A"}
+  </div>
+  <div className="text-sm">Avg Turn Time</div>
+</div>
+
           </div>
           <div className="bg-gray-100 p-4 rounded-lg">
             <div className="text-2xl font-bold text-teal-600">
@@ -3047,8 +3028,25 @@ const BonusResultModal = ({ result }) => {
   <div className="flex justify-between"><span>Puzzles Won:</span><span className="font-bold">{gameStats.teamStats[team.name]?.puzzlesSolved || 0}</span></div>
   <div className="flex justify-between"><span>Correct Guesses:</span><span className="font-bold">{gameStats.teamStats[team.name]?.correctGuesses || 0}</span></div>
   <div className="flex justify-between"><span>Wrong Guesses:</span><span className="font-bold">{gameStats.teamStats[team.name]?.incorrectGuesses || 0}</span></div>
-  <div className="flex justify-between"><span>Turn Efficiency:</span><span className="font-bold">{(gameStats.teamStats[team.name]?.totalTurns || 0) > 0 ? Math.round(team.total / (gameStats.teamStats[team.name]?.totalTurns || 1)) : 0} pts/turn</span></div>
-  <div className="flex justify-between"><span>Avg Turn Time:</span><span className="font-bold">{gameStats.teamStats[team.name]?.avgTurnTime ? Math.round(gameStats.teamStats[team.name].avgTurnTime / 1000) + "s" : "N/A"}</span></div>
+  
+  
+  
+  
+  <div className="flex justify-between">
+    <span>Efficiency:</span>
+    <span className="font-bold">
+              {(gameStats.teamStats[team.name]?.totalTurns || 0) > 0 ? Math.round(team.total / (gameStats.teamStats[team.name]?.totalTurns || 1)) : 0} pts/action
+            </span>
+    </div>
+  <div className="flex justify-between">
+  <span>Avg Turn Time:</span>
+  <span className="font-bold">
+    {Number.isFinite(gameStats.teamStats?.[team.name]?.avgTurnTime)
+      ? Math.round(gameStats.teamStats[team.name].avgTurnTime / 1000) + "s"
+      : "N/A"}
+  </span>
+</div>
+
   <div className="flex justify-between"><span>Correct Letter Streak:</span><span className="font-bold">{gameStats.teamStats[team.name]?.maxConsecutive || 0}</span></div>
   <div className="flex justify-between"><span>Vowels Bought:</span><span className="font-bold">{gameStats.teamStats[team.name]?.vowelsBought || 0}</span></div>
   <div className="flex justify-between"><span>Vowel Success Rate:</span><span className="font-bold">{(() => { const successes = gameStats.teamStats[team.name]?.vowelSuccesses || 0; const failures = gameStats.teamStats[team.name]?.vowelFailures || 0; return (successes + failures) > 0 ? Math.round((successes / (successes + failures)) * 100) + "%" : "N/A"; })()}</span></div>
@@ -3075,12 +3073,35 @@ const BonusResultModal = ({ result }) => {
 );
 
   // Render branches
-  if (phase === "bonus") {
-    const bonusState = bonusActive ? "countdown" : (bonusPrize ? (bonusAwaitingReady ? "ready" : "letters") : "prize_spin");
-    return (
-      <div className={cls("fixed inset-0 z-[60] flex flex-col items-center justify-center overflow-auto p-4", GRADIENT)}>
-        <PersistentHeader />
-        <div className="max-w-6xl w-full mx-auto text-center py-8">
+if (phase === "bonus") {
+  const bonusState = bonusActive ? "countdown" : (bonusPrize ? (bonusAwaitingReady ? "ready" : "letters") : "prize_spin");
+  return (
+    <div className={cls("fixed inset-0 z-[60] flex flex-col items-center justify-center overflow-auto p-4", GRADIENT)}>
+      <PersistentHeader
+        sfx={sfx}
+        phase={phase}
+        backToSetup={backToSetup}
+        toggleFullscreen={toggleFullscreen}
+        awaitingConsonant={awaitingConsonant}
+        zoomed={zoomed}
+        landed={landed}
+        spinning={spinning}
+        showSolveModal={showSolveModal}
+        showWinScreen={showWinScreen}
+        bonusReadyModalVisible={bonusReadyModalVisible}
+        bonusResult={bonusResult}
+        showStats={showStats}
+        showBonusLetterModal={showBonusLetterModal}
+        showBonusSelector={showBonusSelector}
+        bonusActive={bonusActive}
+        bonusRevealing={bonusRevealing}
+        bonusAwaitingReady={bonusAwaitingReady}
+        isFullscreen={isFullscreen}
+        showBonusSolveModal={showBonusSolveModal}
+        bonusSpinning={bonusSpinning}
+        showMysterySpinner={showMysterySpinner}
+      />
+      <div className="max-w-6xl w-full mx-auto text-center py-8">
           <h1 className="text-5xl font-black mb-2">BONUS ROUND</h1>
           <p className="text-2xl mb-6">Good luck: {displayBonusPlayer}</p>
           {bonusState !== "prize_spin" && !bonusHideBoard && (
@@ -3131,6 +3152,7 @@ const BonusResultModal = ({ result }) => {
         {showBonusSelector && <BonusWinnerSelectorModal />}
         {showBonusLetterModal && <BonusLetterModal />}
         {bonusResult && <BonusResultModal result={bonusResult} />}
+          <ConfettiCanvas trigger={bonusResult === 'win'} />
       </div>
     );
   }
@@ -3139,12 +3161,35 @@ const BonusResultModal = ({ result }) => {
     const sorted = [...teams].sort((a, b) => b.total - a.total);
     return (
       <div className={cls("min-h-screen h-screen text-white flex flex-col items-center justify-center p-4", GRADIENT)}>
-        <PersistentHeader />
+        <PersistentHeader
+  sfx={sfx}
+  phase={phase}
+  backToSetup={backToSetup}
+  toggleFullscreen={toggleFullscreen}
+  awaitingConsonant={awaitingConsonant}
+  zoomed={zoomed}
+  landed={landed}
+  spinning={spinning}
+  showSolveModal={showSolveModal}
+  showWinScreen={showWinScreen}
+  bonusReadyModalVisible={bonusReadyModalVisible}
+  bonusResult={bonusResult}
+  showStats={showStats}
+  showBonusLetterModal={showBonusLetterModal}
+  showBonusSelector={showBonusSelector}
+  bonusActive={bonusActive}
+  bonusRevealing={bonusRevealing}
+  bonusAwaitingReady={bonusAwaitingReady}
+  isFullscreen={isFullscreen}
+  showBonusSolveModal={showBonusSolveModal}
+  bonusSpinning={bonusSpinning}
+  showMysterySpinner={showMysterySpinner}
+/>
 
         <div className="max-w-6xl w-full mx-auto p-6 bg-white/10 rounded-2xl backdrop-blur-md flex flex-col gap-6">
           <h1 className="text-3xl md:text-4xl font-black tracking-tight mb-2 text-center">Game Over!</h1>
 
-          <div className="text-lg font-semibold text-center">
+          <div className="text-4xl font-semibold text-center">
             {winners.length > 1 ? "Winners:" : "Winner:"}{" "}
             <span className="font-black text-yellow-300">{winners.join(", ")}</span>
           </div>
@@ -3201,7 +3246,7 @@ const BonusResultModal = ({ result }) => {
   }
 
 
-  if (phase === "setup") {
+if (phase === "setup") {
     // helper used inside render to interpret tempTeamCount for live rendering
     const liveCount = (() => {
       const n = parseIntSafe(tempTeamCount);
@@ -3209,139 +3254,141 @@ const BonusResultModal = ({ result }) => {
     })();
 
     // Start-handler that applies typed values, sanitizes names, and initializes teams/puzzles
-
-const startGameFromSetup = async () => {
-  // Ensure audio is unlocked/resumed in response to this user gesture.
-  try {
-    await sfx.unlock();
-  } catch (e) {
-    // ignore; unlock is best-effort
-    console.warn("sfx.unlock() failed or not needed:", e);
-  }
-
-  // Play the start sound (best-effort)
-  try {
-    sfx.play("startGame");
-  } catch (e) {
-    console.warn("Failed to play startGame sound:", e);
-  }
-
-  // Compute final team count & rounds deterministically from temp values
-  const parsedTeams = parseIntSafe(tempTeamCount);
-  const finalTeamCount = Number.isFinite(parsedTeams) ? Math.min(MAX_TEAMS, Math.max(2, parsedTeams)) : Math.min(MAX_TEAMS, Math.max(2, teamCount));
-
-  const parsedRounds = parseIntSafe(tempRoundsCount);
-  const maxRounds = Math.max(1, (puzzles && puzzles.length) || FALLBACK.length);
-  const finalRounds = Number.isFinite(parsedRounds) ? Math.min(Math.max(1, parsedRounds), maxRounds) : Math.min(Math.max(1, roundsCount), maxRounds);
-
-  // Persist these sanitized values to state
-  setTeamCount(finalTeamCount);
-  setTempTeamCount(String(finalTeamCount));
-  setRoundsCount(finalRounds);
-  setTempRoundsCount(String(finalRounds));
-
-  // Ensure teamNames array is the right length and trimmed
-  const names = makeTeamNamesArray(finalTeamCount, teamNames);
-
-  // Now initialize teams and everything else
-  setTeams(names.map((name) => ({ name, total: 0, round: 0, prizes: [], holding: [] })));
-  setTeamNames(names);
-  setActive(0);
-  setAngle(0);
-  setHasSpun(false);
-  setZoomed(false);
-  setMysteryPrize(null);
-  setWonSpecialWedges([]);
-  setCurrentWedges([...WEDGES]);
-  
-const count = Math.max(1, Math.min(finalRounds, (puzzles && puzzles.length) || FALLBACK.length));
-  
-
-  const chosen = selectRandomPuzzles(puzzles && puzzles.length ? puzzles : FALLBACK, count);
-
-  setBonusResult(null);
-  setBonusWinnerName(null);
-  winnersRef.current = [];
-  setWinners([]);
-
-  // select puzzles based on finalRounds
-  
-setSelectedPuzzles(chosen);
-  setIdx(0);
-  const first = chosen[0] || FALLBACK[0];
-  setBoard(normalizeAnswer(first.answer));
-  setCategory(first.category || "PHRASE");
-  
-  // Track category for statistics
-  setGameStats(prev => {
-    const categoryData = prev.categoryStats[first.category || "PHRASE"] || { attempted: 0, solved: 0 };
-    return {
-      ...prev,
-      categoryStats: {
-        ...prev.categoryStats,
-        [first.category || "PHRASE"]: {
-          ...categoryData,
-          attempted: categoryData.attempted + 1
-        }
+    const startGameFromSetup = async () => {
+      // Ensure audio is unlocked/resumed in response to this user gesture.
+      try {
+        await sfx.unlock();
+      } catch (e) {
+        // ignore; unlock is best-effort
+        console.warn("sfx.unlock() failed or not needed:", e);
       }
+
+      // Play the start sound (best-effort)
+      try {
+        sfx.play("startGame");
+      } catch (e) {
+        console.warn("Failed to play startGame sound:", e);
+      }
+
+      // Compute final team count & rounds deterministically from temp values
+      const parsedTeams = parseIntSafe(tempTeamCount);
+      const finalTeamCount = Number.isFinite(parsedTeams) ? Math.min(MAX_TEAMS, Math.max(2, parsedTeams)) : Math.min(MAX_TEAMS, Math.max(2, teamCount));
+
+      const parsedRounds = parseIntSafe(tempRoundsCount);
+      const maxRounds = Math.max(1, (puzzles && puzzles.length) || FALLBACK.length);
+      const finalRounds = Number.isFinite(parsedRounds) ? Math.min(Math.max(1, parsedRounds), maxRounds) : Math.min(Math.max(1, roundsCount), maxRounds);
+
+      // Persist these sanitized values to state
+      setTeamCount(finalTeamCount);
+      setTempTeamCount(String(finalTeamCount));
+      setRoundsCount(finalRounds);
+      setTempRoundsCount(String(finalRounds));
+
+      // Ensure teamNames array is the right length and trimmed
+      const names = makeTeamNamesArray(finalTeamCount, teamNames);
+
+      // Now initialize teams and everything else
+      setTeams(names.map((name) => ({ name, total: 0, round: 0, prizes: [], holding: [] })));
+      setTeamNames(names);
+      setActive(0);
+      setAngle(0);
+      setHasSpun(false);
+      setZoomed(false);
+      setMysteryPrize(null);
+      setWonSpecialWedges([]);
+      setCurrentWedges([...WEDGES]);
+
+      const count = Math.max(1, Math.min(finalRounds, (puzzles && puzzles.length) || FALLBACK.length));
+      const chosen = selectRandomPuzzles(puzzles && puzzles.length ? puzzles : FALLBACK, count);
+
+      setBonusResult(null);
+      setBonusWinnerName(null);
+      winnersRef.current = [];
+      setWinners([]);
+
+      // select puzzles based on finalRounds
+      setSelectedPuzzles(chosen);
+      setIdx(0);
+      const first = chosen[0] || FALLBACK[0];
+      setBoard(normalizeAnswer(first.answer));
+      setCategory(first.category || "PHRASE");
+
+      // Track category for statistics
+      setGameStats(prev => {
+        const categoryData = prev.categoryStats[first.category || "PHRASE"] || { attempted: 0, solved: 0 };
+        return {
+          ...prev,
+          categoryStats: {
+            ...prev.categoryStats,
+            [first.category || "PHRASE"]: {
+              ...categoryData,
+              attempted: categoryData.attempted + 1
+            }
+          }
+        };
+      });
+
+      setPhase("play");
     };
-  });
-  
-  setPhase("play");
-};
 
-// Initialize gameStats safely for setup (no `first` reference)
-
-
-
-    return (
+ return (
       <div className={cls("min-h-screen h-screen text-white flex items-center justify-center p-4 sm:p-6", GRADIENT)}>
-        <PersistentHeader />
+        <PersistentHeader
+          sfx={sfx}
+          phase={phase}
+          backToSetup={backToSetup}
+          toggleFullscreen={toggleFullscreen}
+          awaitingConsonant={awaitingConsonant}
+          zoomed={zoomed}
+          landed={landed}
+          spinning={spinning}
+          showSolveModal={showSolveModal}
+          showWinScreen={showWinScreen}
+          bonusReadyModalVisible={bonusReadyModalVisible}
+          bonusResult={bonusResult}
+          showStats={showStats}
+          showBonusLetterModal={showBonusLetterModal}
+          showBonusSelector={showBonusSelector}
+          bonusActive={bonusActive}
+          bonusRevealing={bonusRevealing}
+          bonusAwaitingReady={bonusAwaitingReady}
+          isFullscreen={isFullscreen}
+          showBonusSolveModal={showBonusSolveModal}
+          bonusSpinning={bonusSpinning}
+          showMysterySpinner={showMysterySpinner}
+        />
         <div className="max-w-7xl w-full mx-auto">
- <h1 className="text-4xl md:text-6xl font-extrabold tracking-tight mb-6 text-center text-white [text-shadow:0_6px_18px_rgba(0,0,0,0.45)]"
+          <h1 className="text-4xl md:text-6xl font-extrabold tracking-tight mb-6 text-center text-white [text-shadow:0_6px_18px_rgba(0,0,0,0.45)]"
             style={{ fontFamily: "'Poppins', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial" }}
           >
             <span className="inline-block mr-2">🛞</span>
             <span className="bg-clip-text text-transparent bg-gradient-to-r from-yellow-300 via-yellow-400 to-white">Wheel of Jon-Tune</span>
           </h1>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="rounded-2xl p-6 backdrop-blur-md bg-gradient-to-br from-white/6 to-white/3 border border-white/8 shadow-lg transform-gpu hover:scale-105 transition-transform duration-200">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-2xl font-bold tracking-tight text-yellow-300">Game Setup</h2>
-              
-              </div>
-
-              <div className="space-y-5 text-white/95">
-                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-4">
-                  <label className="text-xs uppercase tracking-wider opacity-90 w-full sm:w-auto" htmlFor="team-count-input">Number of Teams</label>
-                  <div className="flex items-center gap-2">
-                    <input
-                      id="team-count-input"
-                      type="text"
-                      inputMode="numeric"
-                      pattern="[0-9]*"
-                      maxLength={3}
-                      value={tempTeamCount}
-                      onChange={(e) => setTempTeamCount(e.target.value.replace(/\D/g, ""))}
-                      onBlur={() => applyTempTeamCount()}
-                      className="w-28 mt-2 px-3 py-2 rounded-xl bg-black/20 text-white font-semibold placeholder:text-white/40 border border-white/6"
-                      placeholder="3"
-                    />
-                    {(() => {
-                      const n = parseIntSafe(tempTeamCount);
-                      if (Number.isFinite(n) && n <= 1) {
-                        return <div className="text-xs text-red-400 mt-1">Invalid — teams must be at least 2.</div>;
-                      }
-                      if (!Number.isFinite(n) && tempTeamCount.trim() !== "") {
-                        return <div className="text-xs text-yellow-300 mt-1">Typing non-numeric characters — numbers only.</div>;
-                      }
-                      return null;
-                    })()}
-                  </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            {/* --- Game Setup Card --- */}
+            <div className="rounded-2xl p-6 md:p-8 backdrop-blur-md bg-white/10 border border-white/10 shadow-lg">
+              <h2 className="text-3xl font-bold text-center text-white mb-8">Game Setup</h2>
+              <div className="space-y-6">
+                {/* Number of Teams */}
+                <div className="flex justify-between items-center gap-4">
+                  <label className="text-xl uppercase tracking-wider font-bold text-white/90 flex-1" htmlFor="team-count-input">Number of Teams</label>
+                  <input
+                    id="team-count-input"
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    maxLength={3}
+                    value={tempTeamCount}
+                    onChange={(e) => setTempTeamCount(e.target.value.replace(/\D/g, ""))}
+                    onBlur={() => applyTempTeamCount()}
+                    className="w-20 px-4 py-3 rounded-lg bg-black/30 text-white text-center font-bold text-xl border border-white/30 focus:outline-none focus:ring-2 focus:ring-yellow-400 transition"
+                  />
                 </div>
- <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-4">
-                  <label className="text-xs uppercase tracking-wider opacity-90 w-full sm:w-auto" htmlFor="rounds-count-input">Number of Main Rounds</label>
-                  <div className="flex items-center gap-2">
+
+                {/* Number of Rounds */}
+                <div>
+                  <div className="flex justify-between items-center gap-4 mb-2">
+                    <label className="text-xl uppercase tracking-wider font-bold text-white/90 flex-1" htmlFor="rounds-count-input">Number of Main Rounds</label>
                     <input
                       id="rounds-count-input"
                       type="text"
@@ -3351,92 +3398,76 @@ setSelectedPuzzles(chosen);
                       value={tempRoundsCount}
                       onChange={(e) => setTempRoundsCount(e.target.value.replace(/\D/g, ""))}
                       onBlur={() => applyTempRoundsCount()}
-                      className="w-28 mt-2 px-3 py-2 rounded-xl bg-black/20 text-white font-semibold placeholder:text-white/40 border border-white/6"
-                      placeholder={`1 - ${Math.max(1, puzzles.length || FALLBACK.length)}`}
+                      className="w-20 px-4 py-3 rounded-lg bg-black/30 text-white text-center font-bold text-xl border border-white/30 focus:outline-none focus:ring-2 focus:ring-yellow-400 transition"
                     />
-                    {(() => {
-                      const r = parseIntSafe(tempRoundsCount);
-                      if (Number.isFinite(r) && r <= 0) {
-                        return <div className="text-xs text-red-400 mt-1">Invalid — rounds must be at least 1.</div>;
-                      }
-                      if (!Number.isFinite(r) && tempRoundsCount.trim() !== "") {
-                        return <div className="text-xs text-yellow-300 mt-1">Typing non-numeric characters — numbers only.</div>;
-                      }
-                      return <div className="text-xs text-white/70 mt-1">Bonus round is always a single extra round</div>;
-                    })()}
                   </div>
-                  </div>
-                  
-                  <div>
-                  <div className="text-sm uppercase tracking-wider opacity-90 mb-2">Team Names</div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-60 overflow-y-auto pr-2">
+                  <p className="text-lg text-white/70 italic">Bonus round is a single extra round.</p>
+                </div>
+                
+                {/* Team Names */}
+                <div>
+                  {/* FIXED: Added text-xl for much larger label text */}
+                  <label className="text-xl uppercase tracking-wider font-bold text-white/90 mb-3 block">Team Names</label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-48 overflow-y-auto pr-2">
                     {Array.from({ length: liveCount }).map((_, i) => (
                       <input
                         key={i}
                         value={teamNames[i] || ""}
-                        onChange={(e) =>
-                          setTeamNames((arr) => {
-                            const n = [...arr];
-                            // enforce max length while typing
-                            n[i] = e.target.value.slice(0, TEAM_NAME_MAX);
-                            return n;
-                          })
-                        }
-                   className="w-full px-3 py-2 rounded-xl bg-black/20 text-white font-semibold placeholder:text-white/40 border border-white/6 focus:outline-none focus:ring-2 focus:ring-yellow-300 transition-transform duration-150"
+                        onChange={(e) => setTeamNames((arr) => {
+                          const n = [...arr];
+                          n[i] = e.target.value.slice(0, TEAM_NAME_MAX);
+                          return n;
+                        })}
+                        className="w-full px-4 py-2 rounded-lg bg-black/20 text-white font-semibold border border-white/20 focus:outline-none focus:ring-2 focus:ring-yellow-400 transition"
                         placeholder={`Team ${i + 1}`}
                       />
                     ))}
                   </div>
-                  <div className="text-xs text-white/60 mt-2">Max name length: {TEAM_NAME_MAX} characters. Max teams: {MAX_TEAMS}.</div>
+                  {/* FIXED: Changed to text-xl for much larger text */}
+                  <p className="text-xl text-white/70 mt-3">Max name length: {TEAM_NAME_MAX} characters.</p>
                 </div>
-              
-
-         <div className="pt-2 flex gap-3">
-                  <button
+                
+                <div className="pt-4">
+                 <button
                     onClick={startGameFromSetup}
-                    disabled={!sfx.loaded}
-                   className={cls(
-    "px-6 py-3 rounded-xl font-extrabold shadow-xl transform hover:-translate-y-1 transition custom-hover",
-    !sfx.loaded 
-      ? "bg-gray-400 text-gray-300 cursor-not-allowed" 
-      : "bg-gradient-to-r from-yellow-400 to-orange-400 text-black"
-  )}
->
-  {sfx.loaded ? "▶ Start Game" : "Loading Audio..."}
-</button>
+                    disabled={!sfx.loaded || !imagesLoaded}
+                    className={cls(
+                      "w-full px-6 py-4 rounded-xl font-extrabold text-lg shadow-xl transform transition duration-200",
+                      (!sfx.loaded || !imagesLoaded)
+                        ? "bg-gray-400 text-gray-300 cursor-not-allowed"
+                        : "bg-gradient-to-r from-yellow-400 to-orange-400 text-black hover:-translate-y-1 active:translate-y-0"
+                    )}
+                  >
+                    {!sfx.loaded ? "Loading..." : 
+                     !imagesLoaded ? "Loading Images..." : 
+                     "▶ Start Game"}
+                  </button>
 
-         <button onClick={sfx.toggleTheme} className="px-4 py-2 rounded-xl bg-white/10 border border-white/8 hover:bg-white/12 font-semibold transition custom-hover">
-                  {sfx.themeOn ? "Music Off" : "Music On"}
-                </button>
                 </div>
               </div>
             </div>
 
-            <div className="rounded-2xl p-6 backdrop-blur-md bg-gradient-to-br from-white/6 to-white/3 border border-white/8 shadow-lg transform-gpu hover:scale-105 transition-transform duration-200">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-2xl font-bold tracking-tight text-yellow-300">How to Play</h2>
-                <div className="text-sm text-white/70">Short & sweet</div>
-              </div>
-              <div className="space-y-4 text-white leading-relaxed">
+            {/* --- How to Play Card --- */}
+            <div className="rounded-2xl p-6 md:p-8 backdrop-blur-md bg-white/10 border border-white/10 shadow-lg">
+              <h2 className="text-3xl font-bold text-center text-white mb-8">How to Play</h2>
+              <div className="space-y-6 text-white/95 leading-relaxed">
                 <div>
-                  <h3 className="font-semibold text-lg">The Goal</h3>
-                <p className="text-sm opacity-95">Work with your team to solve the word puzzle and earn the most money! Solve puzzles, collect prizes, and have fun 🎉</p>
+                  <h3 className="font-semibold text-lg mb-2">🎯 The Goal</h3>
+                  <p className="text-white/80">Work with your team to solve the word puzzle. The team with the most money at the end of all rounds wins!</p>
                 </div>
-
                 <div>
-                  <h3 className="font-semibold text-lg">On Your Turn</h3>
-              <ul className="mt-2 space-y-2 text-sm">
-                    <li className="flex items-start gap-3"><span className="text-xl">🎯</span><span><strong>Spin the Wheel:</strong> Hold SPIN — land a dollar and guess a consonant.</span></li>
-                    <li className="flex items-start gap-3"><span className="text-xl">💸</span><span><strong>Buy a Vowel:</strong> Pay ${VOWEL_COST} to reveal a vowel.</span></li>
-                    <li className="flex items-start gap-3"><span className="text-xl">🏁</span><span><strong>Solve the Puzzle:</strong> Correct solves win your round bank + a bonus!</span></li>
+                  <h3 className="font-semibold text-lg mb-2">🕹️ On Your Turn</h3>
+                  <ul className="list-inside space-y-2 text-white/80">
+                    <li><span className="font-bold">Spin the Wheel:</span> Land on a dollar amount and guess a consonant.</li>
+                    <li><span className="font-bold">Buy a Vowel:</span> Pay ${VOWEL_COST} to reveal a vowel.</li>
+                    <li><span className="font-bold">Solve the Puzzle:</span> Guess the entire phrase to win the round!</li>
                   </ul>
                 </div>
-
                 <div>
-                  <h3 className="font-semibold text-lg">Watch Out For...</h3>
-          <ul className="mt-2 space-y-2 text-sm">
-                    <li className="flex items-start gap-3"><span className="text-xl">⚠️</span><span><strong className="text-red-400">Bankrupt:</strong> You lose your round money.</span></li>
-                    <li className="flex items-start gap-3"><span className="text-xl">⏭️</span><span><strong>Lose a Turn:</strong> Your turn ends immediately.</span></li>
+                  <h3 className="font-semibold text-lg mb-2">⚠️ Watch Out For...</h3>
+                  <ul className="list-inside space-y-2 text-white/80">
+                    <li><strong className="text-red-400">Bankrupt:</strong> You lose all your money for the current round.</li>
+                    <li><strong>Lose a Turn:</strong> Your turn ends immediately.</li>
                   </ul>
                 </div>
               </div>
@@ -3446,6 +3477,17 @@ setSelectedPuzzles(chosen);
       </div>
     );
   }
+  
+
+
+
+
+
+
+
+
+
+
    
   // Main play UI
   const baseBgColor = isCharging ? "#16a34a" : "#22c55e";
@@ -3459,7 +3501,30 @@ setSelectedPuzzles(chosen);
       GRADIENT
     )}
   >
-      <PersistentHeader />
+  <PersistentHeader
+  sfx={sfx}
+  phase={phase}
+  backToSetup={backToSetup}
+  toggleFullscreen={toggleFullscreen}
+  awaitingConsonant={awaitingConsonant}
+  zoomed={zoomed}
+  landed={landed}
+  spinning={spinning}
+  showSolveModal={showSolveModal}
+  showWinScreen={showWinScreen}
+  bonusReadyModalVisible={bonusReadyModalVisible}
+  bonusResult={bonusResult}
+  showStats={showStats}
+  showBonusLetterModal={showBonusLetterModal}
+  showBonusSelector={showBonusSelector}
+  bonusActive={bonusActive}
+  bonusRevealing={bonusRevealing}
+  bonusAwaitingReady={bonusAwaitingReady}
+  isFullscreen={isFullscreen}
+  showBonusSolveModal={showBonusSolveModal}
+  bonusSpinning={bonusSpinning}
+  showMysterySpinner={showMysterySpinner}
+/>
 
       {/* central content (can be hidden when zoomed / win screen) */}
       <div
@@ -3536,19 +3601,39 @@ setSelectedPuzzles(chosen);
               
             </div>
 
-            <div className="w-full max-w-2xl p-2">
-              <div className="flex flex-wrap justify-center gap-2">
-              {LETTERS.map((L) => {
-                  const disabled = isRevealingLetters || letters.has(L) || VOWELS.has(L) || !awaitingConsonant;
-                  return (
-                    <button key={L} onClick={() => guessLetter(L)} disabled={disabled} className={cls("w-10 h-10 rounded-md font-bold text-sm", disabled ? "bg-gray-700/50 text-gray-400 cursor-not-allowed" : "bg-white/10 hover:bg-white/20")}>
-                      {L}
-                    </button>
-                  );
-                })}
-              </div>
-              <div className="text-center mt-2 text-sm opacity-75">{awaitingConsonant ? "Click a consonant" : "Spin, buy a vowel, or solve"}</div>
-            </div>
+        <div className="w-full max-w-2xl p-2">
+  <div className="flex flex-wrap justify-center gap-3">
+    {LETTERS.map((L) => {
+      const disabled = isRevealingLetters || letters.has(L) || VOWELS.has(L) || !awaitingConsonant;
+
+      // tune these multipliers to taste:
+      const sizePx = Math.max(50, Math.round(wheelPx * 0.052)); // min 36px, ~5.2% of wheel
+      const fontPx = Math.max(20, Math.round(wheelPx * 0.028)); // min 16px, ~2.8% of wheel
+
+      return (
+        <button
+          key={L}
+          onClick={() => guessLetter(L)}
+          disabled={disabled}
+          aria-label={`Guess ${L}`}
+          style={{
+            width: `${sizePx}px`,
+            height: `${sizePx}px`,
+            fontSize: `${fontPx}px`,
+            lineHeight: 1,
+          }}
+          className={cls(
+            "rounded-md font-extrabold flex items-center justify-center",
+            disabled ? "bg-gray-700/50 text-gray-400 cursor-not-allowed" : "bg-white/10 hover:bg-white/20"
+          )}
+        >
+          {L}
+        </button>
+      );
+    })}
+  </div>
+  <div className="text-center mt-2 text-sm opacity-75">{awaitingConsonant ? "Click a consonant" : "Spin, buy a vowel, or solve"}</div>
+</div>
           </div>
 
           {/* Right column: board + teams */}
@@ -3658,19 +3743,19 @@ setSelectedPuzzles(chosen);
       {showBonusSolveModal && <BonusSolveInline />}
       {showStats && <StatsModal />}
 
-      {showWinScreen && (
-        <>
-          <WinScreen winner={winners[0] || roundWinner || "Winner"} onClose={() => {
-            try { sfx.stop("solve"); } catch {}
-            setShowWinScreen(false);
-            setRoundWinner(null);
-            setIsRevealingLetters(false);
-            finishingRef.current = false;
-            nextPuzzle();
-          }} />
-          <ConfettiCanvas trigger={showWinScreen} />
-        </>
-      )}
+     {showWinScreen && (
+    <WinScreen winner={winners[0] || roundWinner || "Winner"} onClose={() => {
+      try { sfx.stop("solve"); } catch {}
+      setShowWinScreen(false);
+      setRoundWinner(null);
+      setIsRevealingLetters(false);
+      finishingRef.current = false;
+      nextPuzzle();
+    }} />
+  )}
+
+  {/* MOVED: The confetti canvas now lives here so it can be triggered correctly */}
+  <ConfettiCanvas trigger={showWinScreen || bonusResult === 'win'} />
     </div>
   );
 }
