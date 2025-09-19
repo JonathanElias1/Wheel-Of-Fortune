@@ -3487,12 +3487,13 @@ if (phase === "bonus") {
         </div>
       )}
       
-      {/* Other bonus states */}
-  {bonusState === "countdown" && !bonusHideBoard && (
+   {/* Other bonus states */}
+      {bonusState !== "prize_spin" && (
         <div className="max-w-6xl w-full mx-auto text-center py-8">
           <h1 className="text-5xl font-black mb-2">BONUS ROUND</h1>
           <p className="text-2xl mb-6">Good luck: {displayBonusPlayer}</p>
-          {bonusState === "countdown" && !bonusHideBoard && (
+          
+          {!bonusHideBoard && (
             <div className="my-6">
               <h2 className="text-2xl font-bold tracking-widest uppercase text-center mb-3">{category}</h2>
               <div className="flex flex-wrap justify-center gap-2 p-4 rounded-xl backdrop-blur-md bg-white/10 w-full max-w-4xl mx-auto">
@@ -3514,6 +3515,7 @@ if (phase === "bonus") {
               </div>
             </div>
           )}
+          
           {bonusState === "letters" && bonusAwaitingReady && !bonusReadyModalVisible && (
             <div className="my-8 flex flex-col items-center gap-6">
               <div className="text-5xl font-black text-yellow-300">{bonusPrize}</div>
@@ -3521,8 +3523,10 @@ if (phase === "bonus") {
               <button onClick={() => { setBonusReadyModalVisible(true); }} disabled={readyDisabled || bonusActive} className={cls("px-16 py-6 text-3xl rounded-2xl bg-green-500 text-white font-extrabold shadow-lg transition-transform focus:outline-none", (readyDisabled || bonusActive) ? "opacity-60 cursor-not-allowed transform-none" : "hover:bg-green-600 hover:scale-105 animate-pulse")} aria-disabled={readyDisabled || bonusActive}>READY</button>
             </div>
           )}
+          
           {bonusReadyModalVisible && <BonusReadyModal />}
           {showBonusSolveModal && <BonusSolveInline />}
+          
           {bonusState === "countdown" && (
             <div className="mt-6 flex flex-col items-center gap-4">
               {!showBonusSolveModal && !bonusHideBoard && <div className="mt-4"><button onClick={() => setShowBonusSolveModal(true)} className="px-6 py-3 rounded-xl bg-blue-500 text-white">Open Solve Box</button></div>}
