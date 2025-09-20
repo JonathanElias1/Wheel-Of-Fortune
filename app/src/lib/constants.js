@@ -37,8 +37,9 @@ export const WEDGES = [
 export const VOWELS = new Set(["A", "E", "I", "O", "U"]);
 export const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
 export const ZOOM_WHEEL_PX = BASE_WHEEL_PX * 1.5;
-export const BONUS_PRIZES = ["PIN", "STICKER", "T-SHIRT", "MAGNET", "KEYCHAIN"];
+export const BONUS_PRIZES = ["PIN", "STICKER", "T-SHIRT", "MAGNET", "KEYCHAIN"]; // <-- Add this line
 export const SOLVE_REVEAL_INTERVAL = 650;
+
 
 export const FALLBACK = [
   { category: "PLACE", answer: "JIMMYJONS" },
