@@ -1,3 +1,4 @@
+//original code
 import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 
 const GRADIENT = "bg-[radial-gradient(110%_110%_at_0%_0%,#5b7fff_0%,#21bd84_100%)]";
@@ -49,8 +50,8 @@ function useImagePreloader() {
   useEffect(() => {
     // List of all images used in your game
     const imagePaths = [
-      '/hub-image.png',
-      '/winner-icon.png'
+      '/images/hub-image.png',
+      '/images/winner-icon.png'
       // Add any other images your game uses here
     ];
     
@@ -108,20 +109,20 @@ function useSfx() {
   // list of files to decode (key -> filename)
   const base = "/";
   const FILES = {
-    spin: "wof-spin.mp3",
-    ding: "wof-correct.mp3",
-    buzzer: "wof-buzzer.mp3",
-    themeOpen: "wof-theme-open.mp3",
-    themeLoop: "wheel-theme.mp3",
-    bankrupt: "wof-bankrupt.mp3",
-    solve: "wof-solve.mp3",
-    wild: "wof-wild.mp3",
-    cashDing: "wof-ding.mp3",
-    cashDing2: "cash-ding.mp3",
-    tshirt: "tshirt-sound.mp3",
-    wrongLetter: "wrong-letter.mp3",
-    chargeUp: "charge-up.mp3",
-    startGame: "start-game.mp3",
+    spin: "sounds/wof-spin.mp3",
+    ding: "sounds/wof-correct.mp3",
+    buzzer: "sounds/wof-buzzer.mp3",
+    themeOpen: "sounds/wof-theme-open.mp3",
+    themeLoop: "sounds/wheel-theme.mp3",
+    bankrupt: "sounds/wof-bankrupt.mp3",
+    solve: "sounds/wof-solve.mp3",
+    wild: "sounds/wof-wild.mp3",
+    cashDing: "sounds/wof-ding.mp3",
+    cashDing2: "sounds/cash-ding.mp3",
+    tshirt: "sounds/tshirt-sound.mp3",
+    wrongLetter: "sounds/wrong-letter.mp3",
+    chargeUp: "sounds/charge-up.mp3",
+    startGame: "sounds/start-game.mp3",
   };
 
   // Create AudioContext + masterGain once
