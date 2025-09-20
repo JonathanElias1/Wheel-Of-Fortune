@@ -2101,83 +2101,169 @@ const passTurn = () => {
   setAwaitingConsonant(false);
 };
     
-  function nextPuzzle() {
+function nextPuzzle() {
+
     finishingRef.current = false;
 
+
+
     // IMPORTANT CHANGE: Do NOT convert T-SHIRT wedges to cash.
+
     // We keep MYSTERY (wild) and T-SHIRT wedges exactly as-is in currentWedges.
+
     // Clear tshirtHolder only when appropriate (we reset holder between puzzles).
+
     if (wonSpecialWedges.length > 0) {
+
       setTshirtHolder(null); // reset holder across puzzles
+
       setWonSpecialWedges([]); // keep for stats but do not mutate wedges
+
     }
 
+
+
     setMysteryPrize(null);
+
     landedOwnerRef.current = null;
+
     
+
     const next = idx + 1;
+
     if (next >= selectedPuzzles.length) {
+
+      console.log("BONUS FLOW: Entering bonus round setup");
+
       let topTeams = [];
+
       if (winnersRef.current && winnersRef.current.length > 0) {
+
         topTeams = teams.filter((t) => winnersRef.current.includes(t.name));
+
       } else if (winners && winners.length > 0) {
+
         topTeams = teams.filter((t) => winners.includes(t.name));
+
       } else if (teams && teams.length > 0) {
+
         const maxTotal = Math.max(...teams.map((t) => t.total));
+
         const finalWinners = teams.filter((t) => t.total === maxTotal).map((t) => t.name);
+
         winnersRef.current = finalWinners;
+
         setWinners(finalWinners);
+
         topTeams = teams.filter((t) => finalWinners.includes(t.name));
+
       } else {
+
         setPhase("done");
+
         return;
+
       }
+
       const randomBonusIndex = bonusPuzzles && bonusPuzzles.length ? Math.floor(Math.random() * bonusPuzzles.length) : 0;
+
       const bonusPuzzle = (bonusPuzzles && bonusPuzzles[randomBonusIndex]) || FALLBACK[0];
+
       if (topTeams.length > 0) {
+
+        console.log("BONUS FLOW: Setting up bonus puzzle for teams:", topTeams.map(t => t.name));
+
         setBoard(normalizeAnswer(bonusPuzzle.answer));
+
         setCategory(bonusPuzzle.category || "PHRASE");
+
         setBonusRound(true);
+
         setPhase("bonus");
-        if (topTeams.length > 1) {
+
+         if (topTeams.length > 1) {
+
+          console.log("BONUS FLOW: Multiple winners, showing bonus selector");
+
           setShowBonusSelector(true);
+
         } else {
+
+          console.log("BONUS FLOW: Single winner, going directly to bonus");
+
           const single = topTeams[0].name;
+
           winnersRef.current = [single];
+
           setWinners([single]);
+
         }
+
         return;
+
       } else {
+
         setPhase("done");
+
         return;
+
       }
+
     }
+
     setIdx(next);
+
     const p = selectedPuzzles[next] || FALLBACK[0];
+
     setBoard(normalizeAnswer(p.answer));
+
     setCategory(p.category || "PHRASE");
+
     // Track category for statistics
+
     setGameStats(prev => {
+
       const categoryData = prev.categoryStats[p.category || "PHRASE"] || { attempted: 0, solved: 0 };
+
       return {
+
         ...prev,
+
         categoryStats: {
+
           ...prev.categoryStats,
+
           [p.category || "PHRASE"]: {
+
             ...categoryData,
+
             attempted: categoryData.attempted + 1
+
           }
+
         }
+
       };
+
     });
+
     setLetters(new Set());
+
     setLanded(null);
+
     setAwaitingConsonant(false);
+
     setActive((a) => nextIdx(a, teams.length));
+
     setTeams((ts) => ts.map((t) => ({ ...t, round: 0, holding: [] })));
+
     setAngle(0);
+
     setHasSpun(false);
+
   }
+
+
 
   function startBonusWinnerSelector() {
     setBonusWinnerSpinning(true);
@@ -2211,43 +2297,7 @@ const passTurn = () => {
     }, 150);
   }
 
-  // function startBonusRound() {
-  //   setBonusPrize("");
-  //   setBonusHideBoard(true);
-  //   setBonusSpinning(true);
-  //   try { sfx.play("spin"); } catch (e) {}
 
-  //   let spinCount = 0;
-  //   const maxSpins = 30 + Math.floor(Math.random() * 20);
-
-  //   // clear any existing bonus spinner first
-  //   if (bonusSpinRef.current) {
-  //     clearInterval(bonusSpinRef.current);
-  //     bonusSpinRef.current = null;
-  //   }
-
-  //   bonusSpinRef.current = setInterval(() => {
-  //     setBonusPrize(BONUS_PRIZES[spinCount % BONUS_PRIZES.length]);
-  //     spinCount++;
-
-  //     if (spinCount >= maxSpins) {
-  //       // stop this bonus spinner
-  //       if (bonusSpinRef.current) {
-  //         clearInterval(bonusSpinRef.current);
-  //         bonusSpinRef.current = null;
-  //       }
-
-  //       const finalPrize = BONUS_PRIZES[Math.floor(Math.random() * BONUS_PRIZES.length)];
-  //       setBonusPrize(finalPrize);
-  //       setBonusSpinning(false);
-
-  //       setTimeout(() => {
-  //         setShowBonusLetterModal(true);
-  //         setBonusLetterType("consonant");
-  //       }, 600);
-  //     }
-  //   }, 100);
-  // }
   
   function startBonusRound() {
   setBonusPrize("");
@@ -2289,15 +2339,27 @@ const selectedPrize = BONUS_PRIZES[prizeIndex % BONUS_PRIZES.length];
       
       setBonusPrize(selectedPrize);
       setBonusSpinnerSpinning(false);
+
+
       
       try { 
         sfx.stop("spin"); 
       } catch (e) {}
+
+       // IMMEDIATE: open the choose-letters modal right away and hide the board
+      // so the big bonus landing doesn't flash before the chooser.
+      setShowBonusSpinner(false);        // hide the spinner UI if it's visible
+      setBonusHideBoard(true);          // hide the large board under the modal
+      setBonusPrize(selectedPrize);
+      setShowBonusLetterModal(true);    // show the consonant/vowel picker immediately
+      setBonusLetterType("consonant");  // start in consonant selection mode
       
-   setTimeout(() => {
-  setShowBonusLetterModal(true);
-  setBonusLetterType("consonant");
-}, 1500);
+//    setTimeout(() => {
+//   setShowBonusLetterModal(true);
+//   setBonusLetterType("consonant");
+// }, 
+// 1500
+// );
     }
   };
   
@@ -2590,53 +2652,67 @@ setGameStats({
     return toks;
   }, [board]);
 
-  const TeamCard = ({ t, i }) => {
-    const prizeCounts = (t.prizes || []).reduce((acc, p) => {
-      const key = String(p).toUpperCase();
-      acc[key] = (acc[key] || 0) + 1;
-      return acc;
-    }, {});
-    const holdingCounts = (t.holding || []).reduce((acc, h) => {
-      const k = String(h).toUpperCase();
-      acc[k] = (acc[k] || 0) + 1;
-      return acc;
-    }, {});
-    return (
- <div className={cls(
-      "rounded-2xl p-3 sm:p-4 backdrop-blur-md bg-white/10 fullscreen:p-6 flex flex-col justify-between min-h-[84px] transform-gpu hover:scale-105 transition-transform duration-200",
-      i === active && "ring-4 ring-yellow-300"
-    )}>
-        <div className="flex justify-between items-start">
-          <div>
-            <div className="text-xs uppercase tracking-widest opacity-90">{t.name}</div>
-            <div className="text-xs opacity-70">Total: ${t.total.toLocaleString()}</div>
-          </div>
-          <div className="flex flex-col items-end gap-1">
-            {Object.entries(prizeCounts).map(([prizeLabel, count]) => (
-              <div key={`${prizeLabel}-${count}`} className={cls(
+const TeamCard = ({ t, i }) => {
+  const prizeCounts = (t.prizes || []).reduce((acc, p) => {
+    const key = String(p).toUpperCase();
+    acc[key] = (acc[key] || 0) + 1;
+    return acc;
+  }, {});
+  const holdingCounts = (t.holding || []).reduce((acc, h) => {
+    const k = String(h).toUpperCase();
+    acc[k] = (acc[k] || 0) + 1;
+    return acc;
+  }, {});
+
+  return (
+    <div
+      className={cls(
+        // removed hover scale + transition so hovering DOES NOT transform the card
+        "rounded-2xl p-3 sm:p-4 backdrop-blur-md bg-white/10 fullscreen:p-6 flex flex-col justify-between min-h-[84px] transform-gpu",
+        // make the active highlight an inset ring so it hugs the box
+        i === active ? "ring-4 ring-inset ring-yellow-300 ring-offset-0" : ""
+      )}
+      // ensure cursor isn't a pointer when hovering the card
+      style={{ cursor: "default" }}
+      aria-current={i === active ? "true" : "false"}
+    >
+      <div className="flex justify-between items-start">
+        <div>
+          <div className="text-xs uppercase tracking-widest opacity-90 select-none">{t.name}</div>
+          <div className="text-xs opacity-70">Total: ${t.total.toLocaleString()}</div>
+        </div>
+        <div className="flex flex-col items-end gap-1">
+          {Object.entries(prizeCounts).map(([prizeLabel, count]) => (
+            <div
+              key={`${prizeLabel}-${count}`}
+              className={cls(
                 "px-2 py-1 text-xs font-bold rounded-md",
                 prizeLabel === "T-SHIRT" ? "bg-purple-600" :
                 prizeLabel === "PIN" ? "bg-red-600" :
                 prizeLabel === "STICKER" ? "bg-blue-600" :
                 prizeLabel === "MAGNET" ? "bg-gray-600" :
                 prizeLabel === "KEYCHAIN" ? "bg-orange-600" : "bg-green-600"
-              )}>
-                {prizeLabel}{count > 1 ? ` x${count}` : ""}
-              </div>
-            ))}
-            {Array.isArray(t.holding) && t.holding.length > 0 && phase === "play" && (
-              <div className="flex gap-2 mt-2 flex-wrap">
-                {Object.entries(holdingCounts).map(([label, cnt]) => (
-                  <div key={`holding-${label}`} className="px-2 py-1 text-[10px] font-extrabold rounded-md bg-purple-700/80 text-white">HOLDING {label}{cnt > 1 ? ` x${cnt}` : ""}</div>
-                ))}
-              </div>
-            )}
-          </div>
+              )}
+            >
+              {prizeLabel}{count > 1 ? ` x${count}` : ""}
+            </div>
+          ))}
+          {Array.isArray(t.holding) && t.holding.length > 0 && phase === "play" && (
+            <div className="flex gap-2 mt-2 flex-wrap">
+              {Object.entries(holdingCounts).map(([label, cnt]) => (
+                <div key={`holding-${label}`} className="px-2 py-1 text-[10px] font-extrabold rounded-md bg-purple-700/80 text-white">
+                  HOLDING {label}{cnt > 1 ? ` x${cnt}` : ""}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
-        <div className="mt-1 text-2xl sm:text-3xl font-black tabular-nums fullscreen:text-4xl">${t.round.toLocaleString()}</div>
       </div>
-    );
-  };
+      <div className="mt-1 text-2xl sm:text-3xl font-black tabular-nums fullscreen:text-4xl">${t.round.toLocaleString()}</div>
+    </div>
+  );
+};
+
 
 
   const VowelModal = () => (
