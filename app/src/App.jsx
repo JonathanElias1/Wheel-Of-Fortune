@@ -439,16 +439,21 @@ function nextIdx(i, len) {
 
 function WinScreen({ winner, onClose }) {
   const bouncerRef = useRef(null);
+
   useEffect(() => {
     const bouncer = bouncerRef.current;
     if (!bouncer) return;
+
     let animationFrameId = null;
     let impulseInterval = null;
+
     const rand = (min, max) => min + Math.random() * (max - min);
     const randSign = () => (Math.random() < 0.5 ? -1 : 1);
+
     const baseSize = 48 + Math.random() * 80;
     bouncer.style.width = `${baseSize}px`;
     bouncer.style.height = `${baseSize}px`;
+
     const pos = {
       x: Math.random() * Math.max(1, window.innerWidth - baseSize),
       y: Math.random() * Math.max(1, window.innerHeight - baseSize),
@@ -458,26 +463,32 @@ function WinScreen({ winner, onClose }) {
       rotSpeed: rand(-0.04, 0.04),
       scale: 0.95 + Math.random() * 0.4,
     };
+
     impulseInterval = setInterval(() => {
       const impulsePower = Math.random() < 0.18 ? rand(3, 9) : rand(0.8, 3);
       pos.vx += impulsePower * randSign();
       pos.vy += impulsePower * randSign();
       pos.rotSpeed += rand(-0.18, 0.18);
       pos.scale = 0.9 + Math.random() * 0.6;
+
       if (Math.random() < 0.06) {
         pos.x = Math.min(window.innerWidth - baseSize, Math.max(0, pos.x + rand(-120, 120)));
         pos.y = Math.min(window.innerHeight - baseSize, Math.max(0, pos.y + rand(-120, 120)));
-      
       }
     }, 400 + Math.random() * 600);
+
     const animate = () => {
       const imageSize = { width: bouncer.offsetWidth, height: bouncer.offsetHeight };
       pos.x += pos.vx;
       pos.y += pos.vy;
       pos.rot += pos.rotSpeed;
+
+      // small wander
       pos.x += rand(-0.4, 0.4);
       pos.y += rand(-0.4, 0.4);
       pos.rotSpeed *= 0.97;
+
+      // bounds
       if (pos.x <= 0 || pos.x >= window.innerWidth - imageSize.width) {
         pos.vx *= -0.7;
         pos.x = Math.max(0, Math.min(window.innerWidth - imageSize.width, pos.x));
@@ -488,38 +499,74 @@ function WinScreen({ winner, onClose }) {
         pos.y = Math.max(0, Math.min(window.innerHeight - imageSize.height, pos.y));
         pos.rotSpeed += rand(-0.12, 0.12);
       }
+
       const scale = 0.95 + Math.sin(performance.now() / 220 + pos.x) * 0.08 + (Math.random() * 0.03);
       const skewX = Math.sin(pos.rot * 2) * 2;
       const skewY = Math.cos(pos.rot * 1.5) * 1.2;
-      bouncer.style.transform = `translate(${Math.round(pos.x)}px, ${Math.round(pos.y)}px) rotate(${pos.rot.toFixed(2)}rad) scale(${(pos.scale * scale).toFixed(2)}) skew(${skewX.toFixed(1)}deg, ${skewY.toFixed(1)}deg)`;
+
+      bouncer.style.transform =
+        `translate(${Math.round(pos.x)}px, ${Math.round(pos.y)}px) ` +
+        `rotate(${pos.rot.toFixed(2)}rad) scale(${(pos.scale * scale).toFixed(2)}) ` +
+        `skew(${skewX.toFixed(1)}deg, ${skewY.toFixed(1)}deg)`;
+
       animationFrameId = requestAnimationFrame(animate);
     };
+
     animationFrameId = requestAnimationFrame(animate);
+
+    // 👇 NEW: tap/click anywhere to skip
+    const handleTap = (e) => {
+      e.preventDefault();
+      onClose?.();
+    };
+    window.addEventListener("pointerdown", handleTap, { passive: false });
+
     return () => {
       if (animationFrameId) cancelAnimationFrame(animationFrameId);
       if (impulseInterval) clearInterval(impulseInterval);
+      window.removeEventListener("pointerdown", handleTap);
     };
-  }, [winner]);
+  }, [winner, onClose]);
+
   return (
-    <div className={cls("fixed inset-0 z-[60] flex flex-col items-center justify-center overflow-hidden backdrop-blur-sm", GRADIENT)}>
-          <div style={{ position: "absolute", inset: 0 }} />
-      <img ref={bouncerRef} src="images/winner-icon.png" alt="Bouncing icon" className="absolute top-0 left-0 rounded-lg shadow-lg pointer-events-none" />
+    <div
+      className={cls(
+        "fixed inset-0 z-[60] flex flex-col items-center justify-center overflow-hidden backdrop-blur-sm",
+        GRADIENT
+      )}
+      onClick={onClose}                 // 👈 NEW: click backdrop to skip
+      role="button"
+      aria-label="Continue"
+    >
+      <div style={{ position: "absolute", inset: 0 }} />
+      <img
+        ref={bouncerRef}
+        src="images/winner-icon.png"
+        alt="Bouncing icon"
+        className="absolute top-0 left-0 rounded-lg shadow-lg pointer-events-none"
+      />
+
       <div className="relative z-10 text-center">
-        
-        <h1 className="text-5xl sm:text-6xl md:text-8xl font-black text-white animate-pulse [text-shadow:0_8px_16px_rgba(0,0,0,0.5)]"
-           style={{ fontFamily: "'Poppins', system-ui, -apple-system, 'Segoe UI', Roboto" }}
-        >🎉 WINNER! 🎉
+        <h1
+          className="text-5xl sm:text-6xl md:text-8xl font-black text-white animate-pulse [text-shadow:0_8px_16px_rgba(0,0,0,0.5)]"
+          style={{ fontFamily: "'Poppins', system-ui, -apple-system, 'Segoe UI', Roboto" }}
+        >
+          🎉 WINNER! 🎉
         </h1>
-        <p className="text-3xl sm:text-4xl md:text-6xl text-white mt-6 font-bold [text-shadow:0_4px_8px_rgba(0,0,0,0.5)]">{winner}</p>
-        <p className="text-xl md:text-2xl text-white mt-4 font-semibold animate-bounce">Solved the puzzle! (+${SOLVE_BONUS}!)</p>
-        <p className="text-sm text-white/90 mt-4 opacity-95">Press <strong>Enter</strong> or <strong>Spacebar</strong> to skip</p>
-        <div className="mt-6">
-          {/* <button onClick={onClose} className="px-6 py-3 rounded-xl bg-white text-black font-bold">Continue</button> */}
-        </div>
+        <p className="text-3xl sm:text-4xl md:text-6xl text-white mt-6 font-bold [text-shadow:0_4px_8px_rgba(0,0,0,0.5)]">
+          {winner}
+        </p>
+        <p className="text-xl md:text-2xl text-white mt-4 font-semibold animate-bounce">
+          Solved the puzzle! (+${SOLVE_BONUS}!)
+        </p>
+        <p className="text-sm text-white/90 mt-4 opacity-95">
+          Tap anywhere, or press <strong>Enter</strong>/<strong>Space</strong> to continue
+        </p>
       </div>
     </div>
   );
 }
+
 
 function ConfettiCanvas({ trigger }) {
   const ref = useRef(null);
@@ -634,14 +681,22 @@ const PersistentHeader = ({ sfx, phase, backToSetup, toggleFullscreen, awaitingC
           <label htmlFor="global-volume" className="sr-only">Volume</label>
           <input id="global-volume" type="range" min="0" max="1" step="0.01" value={sfx.volume} onChange={(e) => sfx.setVolume(parseFloat(e.target.value))} className="w-36 md:w-36" aria-label="Global volume" />
         </div>
-        <button onClick={toggleFullscreen} className="px-3 py-2 rounded-lg bg-white/10 border border-white/10 text-sm font-semibold hover:scale-[1.03] hover:bg-white/20 transition custom-hover" title={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"} aria-pressed={isFullscreen}>
+        <button onClick={toggleFullscreen} className="hidden md:inline-flex px-3 py-2 rounded-lg bg-white/10 border border-white/10 text-sm font-semibold hover:scale-[1.03] hover:bg-white/20 transition custom-hover" title={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"} aria-pressed={isFullscreen}>
          
          <span className="hidden sm:inline">Fullscreen</span> 
-                    <span className="sm:hidden">FS</span>
+                   
         </button>
       </div>
     </div>
   );
+};
+
+const sanitizeLetters = (s) => (s || "").replace(/[^A-Za-z ]+/g, "");
+const allowLetterKey = (e) => {
+  const k = e.key;
+  if (k.length === 1 && !/[A-Za-z ]/.test(k) && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    e.preventDefault();
+  }
 };
 
 export default function App() {
@@ -1035,13 +1090,16 @@ useEffect(() => () => {
         // Use Math.min to find the limiting dimension, ensuring the wheel fits.
         const newSize = Math.min(
           screenWidth * 0.9,      // Max 90% of screen width
-          screenHeight * 0.45,    // Max 45% of screen height
+          screenHeight * 0.65,    // Max 45% of screen height
           BASE_WHEEL_PX           // Absolute max size on large screens
         );
 
-        // Apply zoom multiplier if the wheel is zoomed
-        const finalSize = zoomed ? newSize * 1.5 : newSize;
-        setWheelPx(finalSize);
+    // Apply zoom multiplier, but cap it at 95% of screen width for mobile lightbox
+      const potentialZoomSize = newSize * 1.5;
+      const finalSize = zoomed 
+        ? Math.min(potentialZoomSize, screenWidth * 0.95) 
+        : newSize;
+      setWheelPx(finalSize);
 
       } else {
         // Use a fixed size for non-play screens like "setup" or "done"
@@ -2959,7 +3017,17 @@ const TeamCard = ({ t, i }) => {
         <div className="bg-white rounded-xl p-6 w-full max-w-md text-center">
           <h2 className="text-2xl font-bold mb-4 text-black">Solve the Puzzle</h2>
           <form onSubmit={(e) => { e.preventDefault(); handleSolve(); }}>
-            <input ref={inputRef} type="text" value={solveGuess} onChange={(e) => setSolveGuess(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); e.stopPropagation(); handleSolve(); } }} className="w-full px-4 py-3 rounded-xl border-2 border-gray-300 text-lg font-semibold text-black mb-4" placeholder="Enter your guess" autoFocus />
+            
+           <input
+  ref={inputRef}
+  type="text"
+  value={solveGuess}
+onChange={(e) => setSolveGuess(sanitizeLetters(e.target.value))}
+onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); e.stopPropagation(); handleSolve(); } else { allowLetterKey(e); } }}
+  className="w-full px-4 py-3 rounded-xl border-2 border-gray-300 text-lg font-semibold text-black mb-4"
+  placeholder="Enter your guess"
+  autoFocus
+/>
             <div className="flex gap-2 justify-center">
               <button type="submit" className="px-6 py-3 rounded-xl bg-purple-500 text-white font-bold">Submit</button>
               <button type="button" onClick={() => { setSolveGuess(""); setShowSolveModal(false); }} className="px-6 py-3 rounded-xl bg-gray-200 text-gray-800 font-bold">Cancel</button>
@@ -3346,7 +3414,13 @@ const BonusLetterModal = () => {
         <div className="flex flex-col items-center gap-3 mt-3">
           <div className="text-3xl font-black text-red-500">{bonusCountdown}</div>
           <p className="text-sm text-gray-600 text-center">The 20s countdown already began when READY was pressed. Press Enter or click Submit when done.</p>
-          <input id="bonus-inline-solve-input" ref={inputRef} type="text" value={bonusGuess} onChange={onInputChange} onKeyDown={onKeyDown} placeholder="Enter your guess" className="w-full px-4 py-3 rounded-lg border-2 border-blue-300 text-lg" autoFocus />
+          <input id="bonus-inline-solve-input" ref={inputRef} type="text" 
+          value={bonusGuess} 
+          onChange={onInputChange} 
+          onKeyDown={onKeyDown} 
+          placeholder="Enter your guess" 
+          className="w-full px-4 py-3 rounded-lg border-2 border-blue-300 text-lg" 
+          autoFocus />
           <div className="flex items-center gap-3">
             <button onClick={handleBonusSolve} className="px-6 py-2 rounded-lg bg-purple-600 text-white font-semibold">Submit</button>
           </div>
@@ -3816,6 +3890,7 @@ if (phase === "bonus") {
   }
 
 
+// CODE TO REPLACE WITH
 if (phase === "setup") {
     // helper used inside render to interpret tempTeamCount for live rendering
     const liveCount = (() => {
@@ -3901,8 +3976,9 @@ if (phase === "setup") {
       setPhase("play");
     };
 
- return (
-      <div className={cls("min-h-screen h-screen text-white flex items-center justify-center p-4 sm:p-6", GRADIENT)}>
+    return (
+      // MODIFIED: Added overflow-y-auto and changed justify-center to justify-start on mobile
+      <div className={cls("min-h-screen h-screen text-white flex flex-col items-center justify-start lg:justify-center overflow-y-auto p-4 sm:p-6", GRADIENT)}>
         <PersistentHeader
           sfx={sfx}
           phase={phase}
@@ -3927,7 +4003,7 @@ if (phase === "setup") {
           bonusSpinning={bonusSpinning}
           showMysterySpinner={showMysterySpinner}
         />
-        <div className="max-w-7xl w-full mx-auto">
+        <div className="max-w-7xl w-full mx-auto mt-16 lg:mt-0">
           <h1 className="text-4xl md:text-6xl font-extrabold tracking-tight mb-6 text-center text-white [text-shadow:0_6px_18px_rgba(0,0,0,0.45)]"
             style={{ fontFamily: "'Poppins', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial" }}
           >
@@ -3939,9 +4015,10 @@ if (phase === "setup") {
             <div className="rounded-2xl p-6 md:p-8 backdrop-blur-md bg-white/10 border border-white/10 shadow-lg">
               <h2 className="text-3xl font-bold text-center text-white mb-8">Game Setup</h2>
               <div className="space-y-6">
-                {/* Number of Teams */}
-                <div className="flex justify-between items-center gap-4">
-                  <label className="text-xl uppercase tracking-wider font-bold text-white/90 flex-1" htmlFor="team-count-input">Number of Teams</label>
+                
+                {/* MODIFIED: Number of Teams - Stacks on mobile */}
+                <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2 sm:gap-4">
+                  <label className="text-lg sm:text-xl uppercase tracking-wider font-bold text-white/90 text-left sm:text-center" htmlFor="team-count-input">Number of Teams</label>
                   <input
                     id="team-count-input"
                     type="text"
@@ -3951,14 +4028,14 @@ if (phase === "setup") {
                     value={tempTeamCount}
                     onChange={(e) => setTempTeamCount(e.target.value.replace(/\D/g, ""))}
                     onBlur={() => applyTempTeamCount()}
-                    className="w-20 px-4 py-3 rounded-lg bg-black/30 text-white text-center font-bold text-xl border border-white/30 focus:outline-none focus:ring-2 focus:ring-yellow-400 transition"
+                    className="w-full sm:w-20 px-4 py-3 rounded-lg bg-black/30 text-white text-center font-bold text-xl border border-white/30 focus:outline-none focus:ring-2 focus:ring-yellow-400 transition"
                   />
                 </div>
 
-                {/* Number of Rounds */}
+                {/* MODIFIED: Number of Rounds - Stacks on mobile */}
                 <div>
-                  <div className="flex justify-between items-center gap-4 mb-2">
-                    <label className="text-xl uppercase tracking-wider font-bold text-white/90 flex-1" htmlFor="rounds-count-input">Number of Main Rounds</label>
+                  <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2 sm:gap-4 mb-2">
+                    <label className="text-lg sm:text-xl uppercase tracking-wider font-bold text-white/90 text-left sm:text-center" htmlFor="rounds-count-input">Number of Main Rounds</label>
                     <input
                       id="rounds-count-input"
                       type="text"
@@ -3968,16 +4045,15 @@ if (phase === "setup") {
                       value={tempRoundsCount}
                       onChange={(e) => setTempRoundsCount(e.target.value.replace(/\D/g, ""))}
                       onBlur={() => applyTempRoundsCount()}
-                      className="w-20 px-4 py-3 rounded-lg bg-black/30 text-white text-center font-bold text-xl border border-white/30 focus:outline-none focus:ring-2 focus:ring-yellow-400 transition"
+                      className="w-full sm:w-20 px-4 py-3 rounded-lg bg-black/30 text-white text-center font-bold text-xl border border-white/30 focus:outline-none focus:ring-2 focus:ring-yellow-400 transition"
                     />
                   </div>
-                  <p className="text-lg text-white/70 italic">Bonus round is a single extra round.</p>
+                  <p className="text-sm sm:text-lg text-white/70 italic text-left sm:text-right">Bonus round is a single extra round.</p>
                 </div>
                 
                 {/* Team Names */}
                 <div>
-                  {/* FIXED: Added text-xl for much larger label text */}
-                  <label className="text-xl uppercase tracking-wider font-bold text-white/90 mb-3 block">Team Names</label>
+                  <label className="text-xl uppercase tracking-wider font-bold text-white/90 mb-3 block text-left sm:text-center">Team Names</label>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-48 overflow-y-auto pr-2">
                     {Array.from({ length: liveCount }).map((_, i) => (
                       <input
@@ -3993,12 +4069,11 @@ if (phase === "setup") {
                       />
                     ))}
                   </div>
-                  {/* FIXED: Changed to text-xl for much larger text */}
-                  <p className="text-xl text-white/70 mt-3">Max name length: {TEAM_NAME_MAX} characters.</p>
+                  <p className="text-base sm:text-xl text-white/70 mt-3 text-left sm:text-right">Max name length: {TEAM_NAME_MAX} characters.</p>
                 </div>
                 
                 <div className="pt-4">
-                 <button
+                  <button
                     onClick={startGameFromSetup}
                     disabled={!sfx.loaded || !imagesLoaded}
                     className={cls(
@@ -4008,11 +4083,10 @@ if (phase === "setup") {
                         : "bg-gradient-to-r from-yellow-400 to-orange-400 text-black hover:-translate-y-1 active:translate-y-0"
                     )}
                   >
-                    {!sfx.loaded ? "Loading..." : 
-                     !imagesLoaded ? "Loading Images..." : 
-                     "▶ Start Game"}
+                    {!sfx.loaded ? "Loading..." :
+                      !imagesLoaded ? "Loading Images..." :
+                        "▶ Start Game"}
                   </button>
-
                 </div>
               </div>
             </div>
@@ -4063,186 +4137,161 @@ if (phase === "setup") {
   const baseBgColor = isCharging ? "#16a34a" : "#22c55e";
   const fillBgColor = "rgba(4,120,87,0.95)";
 
-  return (
-   <div
-    className={cls(
-      "min-h-screen h-screen text-white flex flex-col items-center p-4",
-      zoomed ? "overflow-hidden" : "overflow-auto",
-      GRADIENT
-    )}
+  
+ return (
+  <div
+   className={cls(
+     "min-h-screen h-screen text-white flex flex-col items-center p-2 sm:p-4",
+     zoomed ? "overflow-hidden" : "overflow-auto",
+     GRADIENT
+   )}
   >
   <PersistentHeader
-  sfx={sfx}
-  phase={phase}
-  backToSetup={backToSetup}
-  toggleFullscreen={toggleFullscreen}
-  awaitingConsonant={awaitingConsonant}
-  zoomed={zoomed}
-  landed={landed}
-  spinning={spinning}
-  showSolveModal={showSolveModal}
-  showWinScreen={showWinScreen}
-  bonusReadyModalVisible={bonusReadyModalVisible}
-  bonusResult={bonusResult}
-  showStats={showStats}
-  showBonusLetterModal={showBonusLetterModal}
-  showBonusSelector={showBonusSelector}
-  bonusActive={bonusActive}
-  bonusRevealing={bonusRevealing}
-  bonusAwaitingReady={bonusAwaitingReady}
-  isFullscreen={isFullscreen}
-  showBonusSolveModal={showBonusSolveModal}
-  bonusSpinning={bonusSpinning}
-  showMysterySpinner={showMysterySpinner}
-/>
+    sfx={sfx}
+    phase={phase}
+    backToSetup={backToSetup}
+    toggleFullscreen={toggleFullscreen}
+    awaitingConsonant={awaitingConsonant}
+    zoomed={zoomed}
+    landed={landed}
+    spinning={spinning}
+    showSolveModal={showSolveModal}
+    showWinScreen={showWinScreen}
+    bonusReadyModalVisible={bonusReadyModalVisible}
+    bonusResult={bonusResult}
+    showStats={showStats}
+    showBonusLetterModal={showBonusLetterModal}
+    showBonusSelector={showBonusSelector}
+    bonusActive={bonusActive}
+    bonusRevealing={bonusRevealing}
+    bonusAwaitingReady={bonusAwaitingReady}
+    isFullscreen={isFullscreen}
+    showBonusSolveModal={showBonusSolveModal}
+    bonusSpinning={bonusSpinning}
+    showMysterySpinner={showMysterySpinner}
+  />
 
-      {/* central content (can be hidden when zoomed / win screen) */}
-      <div
-        className={cls(
-          "w-full h-full flex flex-col",
-          (zoomed || showWinScreen) && "invisible",
-          (isRevealingLetters || finishingRef.current) && "pointer-events-none select-none"
-        )}
-      >
-        <main className="w-full max-w-7xl mx-auto flex-1 flex flex-col lg:flex-row items-center lg:items-center gap-4 min-h-0">
-          {/* Left column: wheel + controls */}
-          <div className="flex flex-col items-center justify-around gap-4 w-full lg:w-1/2 h-full py-4 relative">
-            <div className="relative flex items-center justify-center">
-              <canvas ref={canvasRef} style={{ width: `${wheelPx}px`, height: `${wheelPx}px`, display: "block" }} />
-              {/* HUB IMAGE: centered using left/top 50% + translate to guarantee it's on the exact center of the canvas */}
-              <div
-                className="absolute left-1/2 top-1/2 transform -translate-x-1/2 -translate-y-1/2 rounded-full bg-no-repeat pointer-events-none"
-                style={{ width: "20%", height: "20%", backgroundImage: "url(images/hub-image.png)", backgroundSize: "110%", backgroundPosition: "10% -30px" }}
-                aria-hidden="true"
-              />
-            </div>
-
-       
-                {/* MOBILE CHANGE: Buttons will wrap nicely on small screens */}
-
-                <div className="flex justify-center flex-wrap gap-2 sm:gap-4 items-center">
-
-                    <button ref={spinButtonRef} onMouseDown={startCharge} onMouseUp={endCharge} onMouseLeave={endCharge} disabled={!canSpin} style={canSpin ? { backgroundImage: `linear-gradient(to right, rgba(4,120,87,0.95) ${spinPower}%, #22c55e ${spinPower}%)`, transition: snapChargeToZero ? "none" : "background-image 80ms linear" } : {}} className={cls("rounded-xl font-bold text-lg sm:text-xl px-6 py-3 sm:px-8 sm:py-4 transition-colors custom-hover", !canSpin ? "bg-gray-700/60 text-gray-400 cursor-not-allowed" : "text-white hover:brightness-110")}>
-
-                        SPIN
-
-                    </button>
-
-
-
-
-              <button
-                onClick={() => setShowVowelModal(true)}
-                disabled={!canBuyVowel}
-                className={cls(
-                  "px-6 py-3 rounded-xl font-bold text-lg custom-hover",
-                  !canBuyVowel ? "bg-gray-700/60 text-gray-400 cursor-not-allowed" : "bg-blue-500 text-white hover:bg-blue-600"
-                )}
-              >
-                BUY VOWEL (${VOWEL_COST})
-              </button>
-
-              <button
-                onClick={() => setShowSolveModal(true)}
-                disabled={!canSolve}
-                className={cls(
-                  "px-6 py-3 rounded-xl font-bold text-lg custom-hover",
-                  !canSolve ? "bg-gray-700/60 text-gray-400 cursor-not-allowed" : "bg-purple-500 text-white hover:bg-purple-600"
-                )}
-              >
-                SOLVE
-              </button>
-              
-            </div>
-
-        <div className="w-full max-w-2xl p-2">
-  <div className="flex flex-wrap justify-center gap-3">
-    {LETTERS.map((L) => {
-      const disabled = isRevealingLetters || letters.has(L) || VOWELS.has(L) || !awaitingConsonant;
-
-      // tune these multipliers to taste:
-      const sizePx = Math.max(50, Math.round(wheelPx * 0.052)); // min 36px, ~5.2% of wheel
-      const fontPx = Math.max(20, Math.round(wheelPx * 0.028)); // min 16px, ~2.8% of wheel
-
-      return (
-        <button
-          key={L}
-          onClick={() => guessLetter(L)}
-          disabled={disabled}
-          aria-label={`Guess ${L}`}
-          style={{
-            width: `${sizePx}px`,
-            height: `${sizePx}px`,
-            fontSize: `${fontPx}px`,
-            lineHeight: 1,
-          }}
-          className={cls(
-            "rounded-md font-extrabold flex items-center justify-center",
-            disabled ? "bg-gray-700/50 text-gray-400 cursor-not-allowed" : "bg-white/10 hover:bg-white/20"
-          )}
-        >
-          {L}
-        </button>
-      );
-    })}
-  </div>
-  <div className="text-center mt-2 text-sm opacity-75">{awaitingConsonant ? "Click a consonant" : "Spin, buy a vowel, or solve"}</div>
-</div>
+    {/* central content */}
+    <div
+      className={cls(
+        "w-full h-full flex flex-col",
+        (zoomed || showWinScreen) && "invisible",
+        (isRevealingLetters || finishingRef.current) && "pointer-events-none select-none"
+      )}
+    >
+      {/* KEY CHANGE: Default is 'flex-col' (mobile), but 'lg:flex-row' switches it to your desktop layout on large screens. */}
+      <main className="w-full max-w-7xl mx-auto flex-1 flex flex-col lg:flex-row items-center lg:items-center gap-4 min-h-0">
+        
+        {/* KEY CHANGE: Default is 'w-full' (mobile), 'lg:w-1/2' makes it half-width on large screens for the desktop layout. */}
+        <div className="flex flex-col items-center justify-center gap-2 w-full lg:w-1/2 h-auto lg:h-full py-2">
+          <div className="relative flex items-center justify-center">
+            <canvas ref={canvasRef} style={{ width: `${wheelPx}px`, height: `${wheelPx}px`, display: "block" }} />
+            <div
+              className="absolute left-1/2 top-1/2 transform -translate-x-1/2 -translate-y-1/2 rounded-full bg-no-repeat pointer-events-none"
+              style={{ width: "20%", height: "20%", backgroundImage: "url(images/hub-image.png)", backgroundSize: "110%", backgroundPosition: "10% -30px" }}
+              aria-hidden="true"
+            />
           </div>
 
-          {/* Right column: board + teams */}
-          <div className="flex flex-col gap-4 w-full lg:w-1/2 h-full justify-center">
-            <h2 className="text-2xl font-bold tracking-widest uppercase text-center">{category}</h2>
-            <div className="flex flex-wrap justify-center gap-2 p-4 rounded-xl backdrop-blur-md bg-white/10 w-full">
-              {wordTokens.map((tok, i) => {
-                if (tok.type === "space") return <div key={i} className="w-4 h-10 sm:h-14 flex-shrink-0 fullscreen:w-6" />;
+          <div className="flex justify-center flex-wrap gap-2 sm:gap-4 items-center mt-2">
+            <button ref={spinButtonRef} onMouseDown={startCharge} onMouseUp={endCharge} onMouseLeave={endCharge} disabled={!canSpin} style={canSpin ? { backgroundImage: `linear-gradient(to right, rgba(4,120,87,0.95) ${spinPower}%, #22c55e ${spinPower}%)`, transition: snapChargeToZero ? "none" : "background-image 80ms linear" } : {}} className={cls("rounded-xl font-bold text-base sm:text-xl px-4 py-2 sm:px-8 sm:py-4 transition-colors custom-hover", !canSpin ? "bg-gray-700/60 text-gray-400 cursor-not-allowed" : "text-white hover:brightness-110")}>
+              SPIN
+            </button>
+            <button
+              onClick={() => setShowVowelModal(true)}
+              disabled={!canBuyVowel}
+              className={cls(
+                "px-4 py-2 rounded-xl font-bold text-sm sm:text-lg custom-hover",
+                !canBuyVowel ? "bg-gray-700/60 text-gray-400 cursor-not-allowed" : "bg-blue-500 text-white hover:bg-blue-600"
+              )}
+            >
+              BUY VOWEL (${VOWEL_COST})
+            </button>
+            <button
+              onClick={() => setShowSolveModal(true)}
+              disabled={!canSolve}
+              className={cls(
+                "px-4 py-2 rounded-xl font-bold text-sm sm:text-lg custom-hover",
+                !canSolve ? "bg-gray-700/60 text-gray-400 cursor-not-allowed" : "bg-purple-500 text-white hover:bg-purple-600"
+              )}
+            >
+              SOLVE
+            </button>
+          </div>
+        </div>
+
+        {/* KEY CHANGE: Default is 'w-full' (mobile), 'lg:w-1/2' makes it half-width on large screens. */}
+        <div className="flex flex-col gap-4 w-full lg:w-1/2 h-full justify-center">
+          <h2 className="text-xl sm:text-2xl font-bold tracking-widest uppercase text-center">{category}</h2>
+          <div className="flex flex-wrap justify-center gap-1 sm:gap-2 p-2 sm:p-4 rounded-xl backdrop-blur-md bg-white/10 w-full">
+            {wordTokens.map((tok, i) => {
+              if (tok.type === "space") return <div key={i} className="w-2 sm:w-4 h-10 sm:h-14 flex-shrink-0 fullscreen:w-6" />;
+              return (
+                <div key={i} className="flex gap-1 sm:gap-2">
+                  {tok.cells.map((cell, j) => {
+                    const isSpecial = !isLetter(cell.ch);
+                    return (
+                      <div
+                        key={`${i}-${j}`}
+                        className={cls(
+                          "w-7 h-10 sm:w-10 sm:h-16 text-xl sm:text-3xl font-bold flex items-center justify-center rounded-md",
+                          cell.shown ? "bg-yellow-300 text-black shadow-lg" : "bg-blue-950/80 text-white",
+                          isSpecial && "bg-transparent text-white"
+                        )}
+                      >
+                        {isSpecial ? cell.ch : cell.shown ? cell.ch : ""}
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="w-full max-w-2xl mx-auto p-2">
+            <div className="flex flex-wrap justify-center gap-1 sm:gap-2">
+              {LETTERS.map((L) => {
+                const disabled = isRevealingLetters || letters.has(L) || VOWELS.has(L) || !awaitingConsonant;
+                const sizeClasses = "w-7 h-7 sm:w-9 sm:h-9 text-base sm:text-lg";
+                
                 return (
-                  <div key={i} className="flex gap-2">
-                    {tok.cells.map((cell, j) => {
-                      const isSpecial = !isLetter(cell.ch);
-                      return (
-                        <div
-                          key={`${i}-${j}`}
-                          className={cls(
-                            "w-8 h-12 sm:w-10 sm:h-16 text-2xl sm:text-3xl font-bold flex items-center justify-center rounded-md",
-                            cell.shown ? "bg-yellow-300 text-black shadow-lg" : "bg-blue-950/80 text-white",
-                            isSpecial && "bg-transparent text-white"
-                          )}
-                        >
-                          {isSpecial ? cell.ch : cell.shown ? cell.ch : ""}
-                        </div>
-                      );
-                    })}
-                  </div>
+                  <button
+                    key={L}
+                    onClick={() => guessLetter(L)}
+                    disabled={disabled}
+                    aria-label={`Guess ${L}`}
+                    className={cls(
+                      "rounded-md font-extrabold flex items-center justify-center",
+                      sizeClasses,
+                      disabled ? "bg-gray-700/50 text-gray-400 cursor-not-allowed" : "bg-white/10 hover:bg-white/20"
+                    )}
+                  >
+                    {L}
+                  </button>
                 );
               })}
             </div>
-
-            {/* Teams: make scrollable so many teams don't blow out the page height */}
-            <div
-      className="w-full overflow-y-auto scrollbar-thin scrollbar-thumb-gray-500/60 teams-scroll"
-      style={{
-        // maxHeight uses min() to be adaptive; string values required for units/calc()
-        maxHeight: "min(48vh, calc(100vh - 360px))",
-        paddingRight: "8px",
-      }}
-    >
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 w-full">
-        {teams.map((t, i) => (
-          <TeamCard key={i} t={t} i={i} />
-        ))}
-      </div>
-    </div>
+            <div className="text-center mt-2 text-sm opacity-75">{awaitingConsonant ? "Pick a consonant" : "Spin, buy a vowel, or solve"}</div>
           </div>
-        </main>
-      </div>
 
-      {/* Zoom overlay / popup wheel */}
-      <div className={cls("fixed inset-0 z-50 flex items-center justify-center", !zoomed && "hidden pointer-events-none")}>
+          {/* KEY CHANGE: Team cards switch from 2 to 3 columns on larger screens to fit the desktop layout. */}
+          <div className="w-full">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3 gap-2 sm:gap-4 w-full">
+              {teams.map((t, i) => (
+                <TeamCard key={i} t={t} i={i} />
+              ))}
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    {/* (The rest of your modals and overlays remain unchanged) */}
+    {/* ... (keep the rest of the return statement from the previous answer) ... */}
+    <div className={cls("fixed inset-0 z-50 flex items-center justify-center", !zoomed && "hidden pointer-events-none")}>
         <div className="absolute inset-0 bg-black/70" />
         <div className="relative flex items-center justify-center z-10">
           <canvas ref={zoomCanvasRef} style={{ width: `${wheelPx}px`, height: `${wheelPx}px`, display: "block" }} />
-          {/* Zoom hub: also centered over the zoom canvas */}
           <div
             className="absolute left-1/2 top-1/2 transform -translate-x-1/2 -translate-y-1/2 rounded-full bg-no-repeat pointer-events-none"
             style={{ width: "20%", height: "20%", backgroundImage: "url(images/hub-image.png)", backgroundSize: "110%", backgroundPosition: "10% -50px" }}
@@ -4251,7 +4300,7 @@ if (phase === "setup") {
         </div>
 
         {landed && (
-          <div className="absolute inset-0 flex items-center justify-center p-8 text-7xl sm:text-8xl lg:text-9xl font-black uppercase text-white [text-shadow:0_4px_8px_rgba(0,0,0,0.8)] pointer-events-none z-20">
+          <div className="absolute inset-0 flex items-center justify-center p-8 text-6xl sm:text-8xl lg:text-9xl font-black uppercase text-white [text-shadow:0_4px_8px_rgba(0,0,0,0.8)] pointer-events-none z-20 text-center">
             {landed?.t === "cash" && `$${landed.v.toLocaleString()}`}
             {landed?.t === "bankrupt" && "BANKRUPT"}
             {landed?.t === "lose" && "LOSE A TURN"}
@@ -4261,30 +4310,18 @@ if (phase === "setup") {
         )}
       </div>
 
-      {/* Blocking overlay while revealing letters */}
       {(isRevealingLetters || finishingRef.current) && (
         <div
-        ref={blockingOverlayRef} // <-- ADD THIS REF
+        ref={blockingOverlayRef}
           className="fixed inset-0 z-[90] bg-transparent"
           aria-hidden="true"
-          onPointerDown={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-          }}
-          onMouseDown={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-          }}
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-          }}
-        
+          onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
+          onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
+          onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
           style={{ pointerEvents: "auto" }}
         />
       )}
 
-        {/* Modals & overlays */}
       {showVowelModal && <VowelModal />}
       {showSolveModal && <SolveModal />}
       {showMysterySpinner && <MysterySpinnerModal />}
@@ -4296,18 +4333,17 @@ if (phase === "setup") {
       {showStats && <StatsModal />}
 
      {showWinScreen && (
-    <WinScreen winner={winners[0] || roundWinner || "Winner"} onClose={() => {
-      try { sfx.stop("solve"); } catch {}
-      setShowWinScreen(false);
-      setRoundWinner(null);
-      setIsRevealingLetters(false);
-      finishingRef.current = false;
-      nextPuzzle();
-    }} />
-  )}
+      <WinScreen winner={winners[0] || roundWinner || "Winner"} onClose={() => {
+        try { sfx.stop("solve"); } catch {}
+        setShowWinScreen(false);
+        setRoundWinner(null);
+        setIsRevealingLetters(false);
+        finishingRef.current = false;
+        nextPuzzle();
+      }} />
+    )}
 
-  {/* MOVED: The confetti canvas now lives here so it can be triggered correctly */}
-  <ConfettiCanvas trigger={showWinScreen || bonusResult === 'win'} />
-    </div>
-  );
+    <ConfettiCanvas trigger={showWinScreen || bonusResult === 'win'} />
+  </div>
+ );
 }
