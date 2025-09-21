@@ -3,6 +3,20 @@ import React, { useEffect, useMemo, useRef, useState, useCallback } from "react"
 
 const GRADIENT = "bg-[radial-gradient(110%_110%_at_0%_0%,#5b7fff_0%,#21bd84_100%)]";
 const BASE_WHEEL_PX = 500;
+
+// --- bonus wheel orientation (used by draw + pick) ---
+const BONUS_START_DEG = -90; // -90° puts slice #0 at 12 o’clock
+const BONUS_CW = true;       // true if wedges are drawn clockwise
+const SPIN_MIN_TURNS = 12;        // was 8
+const SPIN_MAX_TURNS = 18;        // was 12-13-ish
+const SPIN_DURATION_MS = 5200;    // was 4000
+const SPIN_SETTLE_MS = 700;       // slow ease to the exact center of the slice
+const POST_LAND_PAUSE_MS = 450;   // linger before opening the letter modal
+
+// 0 = no shift. Negative = rotate mapping counter-clockwise, positive = clockwise.
+const PRIZE_INDEX_CORRECTION = -2; // <- try -2 based on your screenshot (STICKER shown, MAGNET announced)
+
+
 const VOWEL_COST = 200;
 // NEW: max chars for team names
 const TEAM_NAME_MAX = 15;
@@ -42,6 +56,7 @@ const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
 const ZOOM_WHEEL_PX = BASE_WHEEL_PX * 1.5;
 const BONUS_PRIZES = ["PIN", "STICKER", "T-SHIRT", "MAGNET", "KEYCHAIN"];
 const SOLVE_REVEAL_INTERVAL = 650;
+
 
 
 function useImagePreloader() {
@@ -358,8 +373,13 @@ const unlock = async () => {
       // stop intro if running
       if (loopNodesRef.current.__themeIntro) {
         try { loopNodesRef.current.__themeIntro.node.stop(); } catch (e) {}
-        delete loopNodesRef.current.__themeIntro;
-      }
+ const introNode = loopNodesRef.current.__themeIntro.node;
+    if (introNode) {
+      introNode.onended = null; // <-- The key fix!
+      try { introNode.stop(); } catch (e) {}
+    }
+    delete loopNodesRef.current.__themeIntro;
+  }
       stopLoop("themeLoop");
       setThemeOn(false);
     }
@@ -485,7 +505,7 @@ function WinScreen({ winner, onClose }) {
   return (
     <div className={cls("fixed inset-0 z-[60] flex flex-col items-center justify-center overflow-hidden backdrop-blur-sm", GRADIENT)}>
           <div style={{ position: "absolute", inset: 0 }} />
-      <img ref={bouncerRef} src="winner-icon.png" alt="Bouncing icon" className="absolute top-0 left-0 rounded-lg shadow-lg pointer-events-none" />
+      <img ref={bouncerRef} src="images/winner-icon.png" alt="Bouncing icon" className="absolute top-0 left-0 rounded-lg shadow-lg pointer-events-none" />
       <div className="relative z-10 text-center">
         <h1 className="text-8xl font-black text-white animate-pulse [text-shadow:0_8px_16px_rgba(0,0,0,0.5)]"
            style={{ fontFamily: "'Poppins', system-ui, -apple-system, 'Segoe UI', Roboto" }}
@@ -1226,60 +1246,88 @@ useEffect(() => {
 function drawBonusWheel() {
   const canvas = bonusSpinnerRef.current;
   if (!canvas) return;
-  
+
   const ctx = canvas.getContext('2d');
   const size = 400;
-  const centerX = size / 2;
-  const centerY = size / 2;
+  const cx = size / 2;
+  const cy = size / 2;
   const radius = size / 2 - 40;
-  
+
   canvas.width = size;
   canvas.height = size;
-  
+
   ctx.clearRect(0, 0, size, size);
-  
-  const sectionAngle = (Math.PI * 2) / BONUS_PRIZES.length;
+
+  const sections = BONUS_PRIZES.length;
+  if (!sections) return;
+
+  const sectionAngle = 360 / sections;
+  const dir = BONUS_CW ? 1 : -1;
   const colors = ['#ff6b6b', '#4ecdc4', '#45b7d1', '#f9ca24', '#6c5ce7'];
-  
+
   ctx.save();
-  ctx.translate(centerX, centerY);
+  // rotate whole wheel by current spinner angle around center
+  ctx.translate(cx, cy);
   ctx.rotate((bonusSpinnerAngle * Math.PI) / 180);
-  
-  BONUS_PRIZES.forEach((prize, index) => {
-    const startAngle = index * sectionAngle;
-    const endAngle = (index + 1) * sectionAngle;
-    
+  ctx.translate(-cx, -cy);
+
+  for (let i = 0; i < sections; i++) {
+    const startDeg = BONUS_START_DEG + dir * i * sectionAngle;
+    const endDeg   = startDeg + dir * sectionAngle;
+
+    const start = (startDeg * Math.PI) / 180;
+    const end   = (endDeg   * Math.PI) / 180;
+
+    // wedge
     ctx.beginPath();
-    ctx.moveTo(0, 0);
-    ctx.arc(0, 0, radius, startAngle, endAngle);
+    ctx.moveTo(cx, cy);
+    // NOTE: anticlockwise = !BONUS_CW
+    ctx.arc(cx, cy, radius, start, end, !BONUS_CW);
     ctx.closePath();
-    ctx.fillStyle = colors[index % colors.length];
+    ctx.fillStyle = colors[i % colors.length];
     ctx.fill();
     ctx.strokeStyle = '#fff';
     ctx.lineWidth = 3;
     ctx.stroke();
-    
+
+    // label at wedge center
+    const midDeg = startDeg + dir * (sectionAngle / 2);
+    const midRad = (midDeg * Math.PI) / 180;
     ctx.save();
-    ctx.rotate(startAngle + sectionAngle / 2);
-    ctx.textAlign = 'left';
+    ctx.translate(
+      cx + Math.cos(midRad) * (radius * 0.62),
+      cy + Math.sin(midRad) * (radius * 0.62)
+    );
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 18px Arial Black, Impact, sans-serif';
+    ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-   ctx.fillStyle = '#fff';
-ctx.font = 'bold 18px Arial Black, Impact, sans-serif';
-ctx.shadowColor = 'rgba(0,0,0,0.8)';
-ctx.shadowOffsetX = 2;
-ctx.shadowOffsetY = 2;
-ctx.shadowBlur = 3;
-    ctx.fillText(prize, radius * 0.3, 0);
+    ctx.shadowColor = 'rgba(0,0,0,0.8)';
+    ctx.shadowOffsetX = 2;
+    ctx.shadowOffsetY = 2;
+    ctx.shadowBlur = 3;
+    ctx.strokeStyle = 'rgba(0,0,0,0.25)';
+    ctx.lineWidth = 4;
+    ctx.strokeText(BONUS_PRIZES[i], 0, 0);
+    ctx.fillText(BONUS_PRIZES[i], 0, 0);
     ctx.restore();
-  });
-  
-  ctx.restore();
-  
-  // Draw pointer
+  }
+
+  // center hub (optional)
   ctx.beginPath();
-  ctx.moveTo(centerX, 30);
-  ctx.lineTo(centerX - 15, 60);
-  ctx.lineTo(centerX + 15, 60);
+  ctx.arc(cx, cy, radius * 0.1, 0, Math.PI * 2);
+  ctx.fillStyle = '#ffffff';
+  ctx.fill();
+  ctx.strokeStyle = '#00000022';
+  ctx.stroke();
+
+  ctx.restore();
+
+  // pointer (fixed at 12 o’clock)
+  ctx.beginPath();
+  ctx.moveTo(cx, 30);
+  ctx.lineTo(cx - 15, 60);
+  ctx.lineTo(cx + 15, 60);
   ctx.closePath();
   ctx.fillStyle = '#ffd700';
   ctx.fill();
@@ -2306,67 +2354,110 @@ function nextPuzzle() {
   setShowBonusSpinner(true);
 }
 
+
+// Optional tunables (longer spin, no linger)
+const SPIN_MIN_TURNS = 12;
+const SPIN_MAX_TURNS = 18;
+const SPIN_DURATION_MS = 5200;
+
 function spinBonusWheel() {
   if (bonusSpinnerSpinning) return;
-  
+
   setBonusSpinnerSpinning(true);
-  try { 
-    sfx.play("spin"); 
-  } catch (e) {}
-  
-  const spins = Math.floor(Math.random() * 5) + 8;
+  try { sfx.play("spin"); } catch (_) {}
+
+  const spins = Math.floor(Math.random() * (SPIN_MAX_TURNS - SPIN_MIN_TURNS + 1)) + SPIN_MIN_TURNS;
   const finalRotation = Math.floor(Math.random() * 360);
   const totalRotation = spins * 360 + finalRotation;
-  
+
   const startTime = performance.now();
-  const duration = 4000;
   const startAngle = bonusSpinnerAngle;
-  
-  const animate = (currentTime) => {
-    const elapsed = currentTime - startTime;
-    const progress = Math.min(elapsed / duration, 1);
-    
-    const easeOut = 1 - Math.pow(1 - progress, 3);
-    const currentAngle = startAngle + totalRotation * easeOut;
-    
+  const easeOutCubic = (t) => 1 - Math.pow(1 - t, 3);
+
+  const animate = (now) => {
+    const progress = Math.min((now - startTime) / SPIN_DURATION_MS, 1);
+    const currentAngle = startAngle + totalRotation * easeOutCubic(progress);
     setBonusSpinnerAngle(currentAngle);
-    
+
     if (progress < 1) {
       requestAnimationFrame(animate);
-    } else {
-      const normalizedRotation = (360 - (finalRotation % 360)) % 360;
-const prizeIndex = Math.floor(normalizedRotation / (360 / BONUS_PRIZES.length));
-const selectedPrize = BONUS_PRIZES[prizeIndex % BONUS_PRIZES.length];
-      
-      setBonusPrize(selectedPrize);
-      setBonusSpinnerSpinning(false);
-
-
-      
-      try { 
-        sfx.stop("spin"); 
-      } catch (e) {}
-
-       // IMMEDIATE: open the choose-letters modal right away and hide the board
-      // so the big bonus landing doesn't flash before the chooser.
-      setShowBonusSpinner(false);        // hide the spinner UI if it's visible
-      setBonusHideBoard(true);          // hide the large board under the modal
-      setBonusPrize(selectedPrize);
-      setShowBonusLetterModal(true);    // show the consonant/vowel picker immediately
-      setBonusLetterType("consonant");  // start in consonant selection mode
-      
-//    setTimeout(() => {
-//   setShowBonusLetterModal(true);
-//   setBonusLetterType("consonant");
-// }, 
-// 1500
-// );
+      return;
     }
+
+    // --- select prize under top pointer (uses same origin as draw) ---
+    const finalDeg = ((currentAngle % 360) + 360) % 360; // 0..359
+    const sections = BONUS_PRIZES.length;
+    const sectionAngle = 360 / sections;
+
+    const angleUnderPointer = BONUS_CW
+      ? (360 - finalDeg - BONUS_START_DEG + 360) % 360
+      : (finalDeg - BONUS_START_DEG + 360) % 360;
+
+ const rawIndex = Math.floor((angleUnderPointer + sectionAngle / 2) / sectionAngle) % sections;
+const prizeIndex = (rawIndex + PRIZE_INDEX_CORRECTION + sections) % sections;
+const selectedPrize = BONUS_PRIZES[prizeIndex];
+setBonusPrize(selectedPrize);
+console.log('BONUS DEBUG', {
+  finalDeg,
+  angleUnderPointer,
+  rawIndex,
+  correction: PRIZE_INDEX_CORRECTION,
+  prizeIndex,
+  label: BONUS_PRIZES[prizeIndex]
+});
+
+    // snap instantly to slice center (no linger)
+    const centeredUnderPointer = prizeIndex * sectionAngle + sectionAngle / 2;
+    const desiredFinalDeg = BONUS_CW
+      ? (360 - ((centeredUnderPointer + BONUS_START_DEG) % 360) + 360) % 360
+      : ((centeredUnderPointer + BONUS_START_DEG) % 360 + 360) % 360;
+
+    const delta = ((finalDeg - desiredFinalDeg + 540) % 360) - 180;
+    setBonusSpinnerAngle(currentAngle - delta);
+
+    try { sfx.stop("spin"); } catch (_) {}
+    setBonusSpinnerSpinning(false);
+
+    // open modal immediately
+    setShowBonusSpinner(false);
+    setBonusHideBoard(true);
+    setShowBonusLetterModal(true);
+    setBonusLetterType("consonant");
   };
-  
+
   requestAnimationFrame(animate);
 }
 
+
+function selectBonusPrizeAndSnap(currentAngle, setBonusPrize, setBonusSpinnerAngle) {
+  const sections = BONUS_PRIZES.length;
+  if (!sections) return;
+
+  const sectionAngle = 360 / sections;
+
+  // wheel’s absolute final angle normalized (0..359)
+  const finalDeg = ((currentAngle % 360) + 360) % 360;
+
+  // angle under the fixed 12 o’clock pointer using SAME origin as draw
+  const angleUnderPointer = BONUS_CW
+    ? (360 - finalDeg - BONUS_START_DEG + 360) % 360
+    : (finalDeg - BONUS_START_DEG + 360) % 360;
+
+  // center selection to avoid border off-by-one
+  const prizeIndex = Math.floor((angleUnderPointer + sectionAngle / 2) / sectionAngle) % sections;
+  const selectedPrize = BONUS_PRIZES[prizeIndex];
+  setBonusPrize(selectedPrize);
+
+  // snap instantly to exact center of the winning slice (no linger)
+  const centeredUnderPointer = prizeIndex * sectionAngle + sectionAngle / 2;
+  const desiredFinalDeg = BONUS_CW
+    ? (360 - ((centeredUnderPointer + BONUS_START_DEG) % 360) + 360) % 360
+    : ((centeredUnderPointer + BONUS_START_DEG) % 360 + 360) % 360;
+
+  // rotate minimal amount to align exactly to center
+  const delta = ((finalDeg - desiredFinalDeg + 540) % 360) - 180;
+  setBonusSpinnerAngle(currentAngle - delta);
+}
 
   function handleBonusLetter(letter) {
     if (bonusLetterType === "consonant") {
@@ -3104,8 +3195,6 @@ const BonusLetterModal = () => {
 };
 
 
-
-
   const BonusSolveInline = () => {
     const inputRef = useRef(null);
     useEffect(() => {
@@ -3233,9 +3322,6 @@ const BonusResultModal = ({ result }) => {
   );
 };
 
-
-
-
   const StatsModal = () => (
   <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80">
     <div className="bg-white rounded-xl p-6 w-full max-w-4xl text-center max-h-[80vh] overflow-y-auto">
@@ -3348,9 +3434,7 @@ const BonusResultModal = ({ result }) => {
   <div className="flex justify-between"><span>Puzzles Won:</span><span className="font-bold">{gameStats.teamStats[team.name]?.puzzlesSolved || 0}</span></div>
   <div className="flex justify-between"><span>Correct Guesses:</span><span className="font-bold">{gameStats.teamStats[team.name]?.correctGuesses || 0}</span></div>
   <div className="flex justify-between"><span>Wrong Guesses:</span><span className="font-bold">{gameStats.teamStats[team.name]?.incorrectGuesses || 0}</span></div>
-  
-  
-  
+
   
   <div className="flex justify-between">
     <span>Efficiency:</span>
@@ -3393,109 +3477,6 @@ const BonusResultModal = ({ result }) => {
 );
 
   // Render branches
-
-// Replace the entire bonus round section (starting with if (phase === "bonus")) with this:
-
-// if (phase === "bonus") {
-//   const bonusState = bonusActive ? "countdown" : (bonusPrize ? (bonusAwaitingReady ? "ready" : "letters") : "prize_spin");
-//   return (
-//     <div className={cls("fixed inset-0 z-[60] flex flex-col items-center justify-center overflow-auto p-4", GRADIENT)}>
-//       <PersistentHeader
-//         sfx={sfx}
-//         phase={phase}
-//         backToSetup={backToSetup}
-//         toggleFullscreen={toggleFullscreen}
-//         awaitingConsonant={awaitingConsonant}
-//         zoomed={zoomed}
-//         landed={landed}
-//         spinning={spinning}
-//         showSolveModal={showSolveModal}
-//         showWinScreen={showWinScreen}
-//         bonusReadyModalVisible={bonusReadyModalVisible}
-//         bonusResult={bonusResult}
-//         showStats={showStats}
-//         showBonusLetterModal={showBonusLetterModal}
-//         showBonusSelector={showBonusSelector}
-//         bonusActive={bonusActive}
-//         bonusRevealing={bonusRevealing}
-//         bonusAwaitingReady={bonusAwaitingReady}
-//         isFullscreen={isFullscreen}
-//         showBonusSolveModal={showBonusSolveModal}
-//         bonusSpinning={bonusSpinning}
-//         showMysterySpinner={showMysterySpinner}
-//       />
-      
-//       {/* Prize Spin State - Show wheel and spin button */}
-//       {bonusState === "prize_spin" && !showBonusSelector && !showBonusSpinner && (
-//   <div className="max-w-7xl w-full mx-auto text-center py-8 flex flex-col items-center justify-center min-h-screen">
-//     <div className="mb-8">
-//       <h1 className="text-6xl font-black mb-4 text-white [text-shadow:0_8px_16px_rgba(0,0,0,0.5)]">🎊 BONUS ROUND 🎊</h1>
-//       <p className="text-3xl font-bold text-yellow-300 [text-shadow:0_4px_8px_rgba(0,0,0,0.5)]">Good luck: {displayBonusPlayer}!</p>
-//       <p className="text-xl text-white/90 mt-4">Click the button to see what prize you're playing for!</p>
-//     </div>
-    
-//     <button 
-//       onClick={startBonusRound} 
-//       className="px-12 py-6 rounded-2xl bg-gradient-to-r from-purple-500 to-pink-500 text-white font-extrabold text-2xl hover:from-purple-600 hover:to-pink-600 hover:scale-105 transform transition-all duration-300 shadow-2xl animate-pulse"
-//     >
-//       🎁 SPIN FOR PRIZE 🎁
-//     </button>
-//   </div>
-// )}
-      
-//       {/* Other bonus states */}
-//       {bonusState !== "prize_spin" && (
-//         <div className="max-w-6xl w-full mx-auto text-center py-8">
-//           <h1 className="text-5xl font-black mb-2">BONUS ROUND</h1>
-//           <p className="text-2xl mb-6">Good luck: {displayBonusPlayer}</p>
-//           {!bonusHideBoard && (
-//             <div className="my-6">
-//               <h2 className="text-2xl font-bold tracking-widest uppercase text-center mb-3">{category}</h2>
-//               <div className="flex flex-wrap justify-center gap-2 p-4 rounded-xl backdrop-blur-md bg-white/10 w-full max-w-4xl mx-auto">
-//                 {wordTokens.map((tok, i) => {
-//                   if (tok.type === "space") return <div key={i} className="w-4 h-10 sm:h-14 flex-shrink-0" />;
-//                   return (
-//                     <div key={i} className="flex gap-2">
-//                       {tok.cells.map((cell, j) => {
-//                         const isSpecial = !isLetter(cell.ch);
-//                         return (
-//                           <div key={`${i}-${j}`} className={cls("w-10 h-12 sm:w-12 sm:h-16 text-2xl sm:text-3xl font-extrabold flex items-center justify-center rounded-md select-none", cell.shown ? "bg-yellow-300 text-black shadow-md" : "bg-blue-900/90 text-white", isSpecial && "bg-transparent text-white")}>
-//                             {isSpecial ? cell.ch : (cell.shown ? cell.ch : "")}
-//                           </div>
-//                         );
-//                       })}
-//                     </div>
-//                   );
-//                 })}
-//               </div>
-//             </div>
-//           )}
-//           {bonusState === "letters" && bonusAwaitingReady && !bonusReadyModalVisible && (
-//             <div className="my-8 flex flex-col items-center gap-6">
-//               <div className="text-5xl font-black text-yellow-300">{bonusPrize}</div>
-//               <p className="text-lg">Letters revealed. Press READY when you're ready to begin the 20s countdown.</p>
-//               <button onClick={() => { setBonusReadyModalVisible(true); }} disabled={readyDisabled || bonusActive} className={cls("px-16 py-6 text-3xl rounded-2xl bg-green-500 text-white font-extrabold shadow-lg transition-transform focus:outline-none", (readyDisabled || bonusActive) ? "opacity-60 cursor-not-allowed transform-none" : "hover:bg-green-600 hover:scale-105 animate-pulse")} aria-disabled={readyDisabled || bonusActive}>READY</button>
-//             </div>
-//           )}
-//           {bonusReadyModalVisible && <BonusReadyModal />}
-//           {showBonusSolveModal && <BonusSolveInline />}
-//           {bonusState === "countdown" && (
-//             <div className="mt-6 flex flex-col items-center gap-4">
-//               {!showBonusSolveModal && !bonusHideBoard && <div className="mt-4"><button onClick={() => setShowBonusSolveModal(true)} className="px-6 py-3 rounded-xl bg-blue-500 text-white">Open Solve Box</button></div>}
-//             </div>
-//           )}
-//         </div>
-//       )}
-      
-//       {showBonusSelector && <BonusWinnerSelectorModal />}
-//       {showBonusSpinner && <BonusSpinnerModal />}
-//       {showBonusLetterModal && <BonusLetterModal />}
-//       {bonusResult && <BonusResultModal result={bonusResult} />}
-//       <ConfettiCanvas trigger={bonusResult === 'win'} />
-//     </div>
-//   );
-// }
-
 if (phase === "bonus") {
   const bonusState = bonusActive ? "countdown" : (bonusPrize ? (bonusAwaitingReady ? "ready" : "letters") : "prize_spin");
   return (
@@ -4005,7 +3986,7 @@ if (phase === "setup") {
               {/* HUB IMAGE: centered using left/top 50% + translate to guarantee it's on the exact center of the canvas */}
               <div
                 className="absolute left-1/2 top-1/2 transform -translate-x-1/2 -translate-y-1/2 rounded-full bg-no-repeat pointer-events-none"
-                style={{ width: "20%", height: "20%", backgroundImage: "url(hub-image.png)", backgroundSize: "110%", backgroundPosition: "10% -30px" }}
+                style={{ width: "20%", height: "20%", backgroundImage: "url(images/hub-image.png)", backgroundSize: "110%", backgroundPosition: "10% -30px" }}
                 aria-hidden="true"
               />
             </div>
@@ -4154,7 +4135,7 @@ if (phase === "setup") {
           {/* Zoom hub: also centered over the zoom canvas */}
           <div
             className="absolute left-1/2 top-1/2 transform -translate-x-1/2 -translate-y-1/2 rounded-full bg-no-repeat pointer-events-none"
-            style={{ width: "20%", height: "20%", backgroundImage: "url(hub-image.png)", backgroundSize: "110%", backgroundPosition: "10% -50px" }}
+            style={{ width: "20%", height: "20%", backgroundImage: "url(images/hub-image.png)", backgroundSize: "110%", backgroundPosition: "10% -50px" }}
             aria-hidden="true"
           />
         </div>
