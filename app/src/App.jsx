@@ -5,7 +5,7 @@ import useSfx from "./hooks/useSfx";
 import useImagePreloader from "./hooks/useImagePreloader";
 
 // Data
-import loadPuzzles from "./data/loadPuzzles";
+import {loadPuzzles} from "./data/loadPuzzles";
 
 // Constants
 import { 
