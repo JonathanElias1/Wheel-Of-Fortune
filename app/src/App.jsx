@@ -656,6 +656,9 @@ export default function App() {
   const [category, setCategory] = useState(FALLBACK[0].category || "PHRASE");
   const wheelContainerRef = useRef(null);
   const zoomContainerRef = useRef(null);
+  const spinButtonRef = useRef(null); // <-- ADD THIS LINE
+const blockingOverlayRef = useRef(null);
+
   const [teams, setTeams] = useState([
     { name: "Team 1", total: 0, round: 0, prizes: [], holding: [] },
     { name: "Team 2", total: 0, round: 0, prizes: [], holding: [] },
@@ -909,6 +912,8 @@ const imagesLoaded = useImagePreloader(); // ADD THIS LINE
   const canBuyVowel = (teams[active]?.round ?? 0) >= VOWEL_COST && !spinning && !isSolved() && hasSpun && !allVowelsGuessed && !bonusRound && !isRevealingLetters;
   // allow solve while mystery spinner is shown so solver can claim the final mystery prize immediately
   const canSolve = ( (!spinning || showMysterySpinner) && hasSpun && !isSolved() && !bonusRound && !isRevealingLetters );
+
+
 
   useEffect(() => {
     loadPuzzles().then((data) => {
@@ -1323,11 +1328,11 @@ function drawBonusWheel() {
 
   ctx.restore();
 
-  // pointer (fixed at 12 o’clock)
+
   ctx.beginPath();
-  ctx.moveTo(cx, 30);
-  ctx.lineTo(cx - 15, 60);
-  ctx.lineTo(cx + 15, 60);
+  ctx.moveTo(cx, 50);
+  ctx.lineTo(cx - 15, 20);
+  ctx.lineTo(cx + 15, 20);
   ctx.closePath();
   ctx.fillStyle = '#ffd700';
   ctx.fill();
@@ -1474,6 +1479,51 @@ const endCharge = () => {
   onSpin(power);
 };
 
+
+  // PASTE THE useEffect BLOCK HERE
+  useEffect(() => {
+    const button = spinButtonRef.current;
+    if (!button) return;
+
+    const handleTouchStart = (e) => {
+      if (button.disabled) return;
+      e.preventDefault();
+      startCharge();
+    };
+
+    const handleTouchEnd = (e) => {
+      if (button.disabled) return;
+      e.preventDefault();
+      endCharge();
+    };
+
+    button.addEventListener('touchstart', handleTouchStart, { passive: false });
+    button.addEventListener('touchend', handleTouchEnd, { passive: false });
+
+    return () => {
+      button.removeEventListener('touchstart', handleTouchStart);
+      button.removeEventListener('touchend', handleTouchEnd);
+    };
+  }, [canSpin, startCharge, endCharge]);
+
+ // PASTE THE NEW useEffect FOR THE OVERLAY HERE
+  useEffect(() => {
+    const overlay = blockingOverlayRef.current;
+    if (!overlay) return;
+
+    const blockEvent = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+    };
+
+    // Add the listener with passive: false to fix the warning
+    overlay.addEventListener('touchstart', blockEvent, { passive: false });
+
+    // Cleanup
+    return () => {
+      overlay.removeEventListener('touchstart', blockEvent);
+    };
+  }, []);
 
   function onSpin(power = 10) {
     if (finishingRef.current || isRevealingLetters) return;
@@ -3370,27 +3420,28 @@ const BonusResultModal = ({ result }) => {
             <div className="text-2xl font-bold text-orange-600">{gameStats.loseTurns}</div>
             <div className="text-sm">Lose a Turn</div>
           </div>
-          <div className="bg-gray-100 p-4 rounded-lg">
+          {/* <div className="bg-gray-100 p-4 rounded-lg">
     <div className="text-2xl font-bold text-green-600">{gameStats.correctGuesses + gameStats.incorrectGuesses === 0 ? "N/A" : Math.round((gameStats.correctGuesses / (gameStats.correctGuesses + gameStats.incorrectGuesses)) * 100) + "%"}</div>
             <div className="text-sm">Accuracy</div>
-          </div>
-          <div className="bg-gray-100 p-4 rounded-lg">
+          </div> */}
+          {/* <div className="bg-gray-100 p-4 rounded-lg">
   <div className="text-2xl font-bold text-cyan-600">{gameStats.puzzlesStarted > 0 ? Math.round((gameStats.puzzlesSolved / gameStats.puzzlesStarted) * 100) + "%" : "N/A"}</div>
   <div className="text-sm">Completion Rate</div>
-</div>
+</div> */}
 <div className="bg-gray-100 p-4 rounded-lg">
   <div className="text-2xl font-bold text-indigo-600">{gameStats.gameStartTime ? Math.round((Date.now() - gameStats.gameStartTime) / 60000) + "m" : "N/A"}</div>
   <div className="text-sm">Game Duration</div>
 </div>
 
-<div className="bg-gray-100 p-4 rounded-lg">
+{/* <div className="bg-gray-100 p-4 rounded-lg">
             <div className="text-2xl font-bold text-pink-600">${gameStats.maxComeback.toLocaleString()}</div>
             <div className="text-sm">Biggest Comeback</div>
-          </div>
+          </div> */}
           <div className="bg-gray-100 p-4 rounded-lg">
-            <div className="text-2xl font-bold text-purple-600">
+            {/* <div className="text-2xl font-bold text-purple-600">
               {gameStats.turnCount > 0 ? Math.round(gameStats.totalTurnTime / gameStats.turnCount / 1000) + "s" : "N/A"}
-            </div>
+            </div> */}
+          
            <div className="bg-gray-100 p-4 rounded-lg">
   <div className="text-2xl font-bold text-purple-600">
     {Number.isFinite(gameStats.totalTurnTime) && (gameStats.turnCount || 0) > 0
@@ -3401,14 +3452,14 @@ const BonusResultModal = ({ result }) => {
 </div>
 
           </div>
-          <div className="bg-gray-100 p-4 rounded-lg">
+          {/* <div className="bg-gray-100 p-4 rounded-lg">
             <div className="text-2xl font-bold text-teal-600">
               {(gameStats.vowelSuccesses + gameStats.vowelFailures) > 0 
                 ? Math.round((gameStats.vowelSuccesses / (gameStats.vowelSuccesses + gameStats.vowelFailures)) * 100) + "%"
                 : "N/A"}
             </div>
             <div className="text-sm">Vowel Success Rate</div>
-          </div>
+          </div> */}
           <div className="bg-gray-100 p-4 rounded-lg">
             <div className="text-lg font-bold text-red-600">
               {Object.entries(gameStats.incorrectLetters || {})
@@ -3417,7 +3468,7 @@ const BonusResultModal = ({ result }) => {
                 .map(([letter, count]) => `${letter}(${count})`)
                 .join(" ") || "None"}
             </div>
-            <div className="text-sm">Most Missed Letters</div>
+            <div className="text-sm">Most Incorrect Letters</div>
           </div>
         </div>
 
@@ -3457,7 +3508,7 @@ const BonusResultModal = ({ result }) => {
   <div className="flex justify-between"><span>Spins:</span><span className="font-bold">{gameStats.teamStats[team.name]?.spins || 0}</span></div>
   <div className="flex justify-between"><span>Bankrupts:</span><span className="font-bold">{gameStats.teamStats[team.name]?.bankrupts || 0}</span></div>
   <div className="flex justify-between"><span>Lose a Turn:</span><span className="font-bold">{gameStats.teamStats[team.name]?.loseTurns || 0}</span></div>
-  <div className="flex justify-between"><span>Biggest Comeback:</span><span className="font-bold">${(gameStats.teamStats[team.name]?.biggestComeback || 0).toLocaleString()}</span></div>
+  {/* <div className="flex justify-between"><span>Biggest Comeback:</span><span className="font-bold">${(gameStats.teamStats[team.name]?.biggestComeback || 0).toLocaleString()}</span></div> */}
   <div className="flex justify-between"><span>Solved While Behind:</span><span className="font-bold">{gameStats.teamStats[team.name]?.solveWhenBehind || 0}</span></div>
   {team.prizes && team.prizes.length > 0 && (
                   <div>
@@ -3993,17 +4044,12 @@ if (phase === "setup") {
 
             <div className="flex justify-center flex-wrap gap-4 items-center">
               <button
+          
+ref={spinButtonRef}
                 onMouseDown={startCharge}
                 onMouseUp={endCharge}
                 onMouseLeave={endCharge}
-                onTouchStart={(e) => {
-                  e.preventDefault();
-                  startCharge();
-                }}
-                onTouchEnd={(e) => {
-                  e.preventDefault();
-                  endCharge();
-                }}
+                
                 disabled={!canSpin}
                 style={
                   canSpin
@@ -4020,6 +4066,9 @@ if (phase === "setup") {
               >
                 <span className="select-none">SPIN (Hold)</span>
               </button>
+
+
+
 
               <button
                 onClick={() => setShowVowelModal(true)}
@@ -4154,6 +4203,7 @@ if (phase === "setup") {
       {/* Blocking overlay while revealing letters */}
       {(isRevealingLetters || finishingRef.current) && (
         <div
+        ref={blockingOverlayRef} // <-- ADD THIS REF
           className="fixed inset-0 z-[90] bg-transparent"
           aria-hidden="true"
           onPointerDown={(e) => {
@@ -4168,10 +4218,7 @@ if (phase === "setup") {
             e.preventDefault();
             e.stopPropagation();
           }}
-          onTouchStart={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-          }}
+        
           style={{ pointerEvents: "auto" }}
         />
       )}
