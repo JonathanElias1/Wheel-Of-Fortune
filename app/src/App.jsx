@@ -5,22 +5,19 @@ const GRADIENT = "bg-[radial-gradient(110%_110%_at_0%_0%,#5b7fff_0%,#21bd84_100%
 const BASE_WHEEL_PX = 500;
 
 // --- bonus wheel orientation (used by draw + pick) ---
-const BONUS_START_DEG = -90; // -90° puts slice #0 at 12 o’clock
-const BONUS_CW = true;       // true if wedges are drawn clockwise
-const SPIN_MIN_TURNS = 12;        // was 8
-const SPIN_MAX_TURNS = 18;        // was 12-13-ish
-const SPIN_DURATION_MS = 5200;    // was 4000
-const SPIN_SETTLE_MS = 700;       // slow ease to the exact center of the slice
-const POST_LAND_PAUSE_MS = 450;   // linger before opening the letter modal
+const BONUS_START_DEG = -90; 
+const BONUS_CW = true;       
+const SPIN_MIN_TURNS = 12;        
+const SPIN_MAX_TURNS = 18;      
+const SPIN_DURATION_MS = 5200;    
+const SPIN_SETTLE_MS = 700;       
+const POST_LAND_PAUSE_MS = 450;   
 
-// 0 = no shift. Negative = rotate mapping counter-clockwise, positive = clockwise.
-const PRIZE_INDEX_CORRECTION = -2; // <- try -2 based on your screenshot (STICKER shown, MAGNET announced)
-
+const PRIZE_INDEX_CORRECTION = -2; 
 
 const VOWEL_COST = 200;
-// NEW: max chars for team names
+
 const TEAM_NAME_MAX = 15;
-// limit teams
 const MAX_TEAMS = 100;
 const SOLVE_BONUS = 300;
 
@@ -63,11 +60,11 @@ function useImagePreloader() {
   const [imagesLoaded, setImagesLoaded] = useState(false);
   
   useEffect(() => {
-    // List of all images used in your game
+    // List of all images used in your game add any others below
     const imagePaths = [
       '/images/hub-image.png',
       '/images/winner-icon.png'
-      // Add any other images your game uses here
+
     ];
     
     if (imagePaths.length === 0) {
@@ -180,7 +177,7 @@ function useSfx() {
       audioCtxRef.current = null;
       masterGainRef.current = null;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, []);
 
   // decode all files in parallel (non-blocking)
@@ -203,10 +200,10 @@ function useSfx() {
     });
 
     Promise.allSettled(decodes).then(() => {
-        loadedRef.current = true;  // Add this line
+        loadedRef.current = true; 
       setLoaded(true);
     }).catch(() => {
-       loadedRef.current = true;  // Add this line
+       loadedRef.current = true;  
       setLoaded(true);
     });
     // no cleanup needed here (buffers live until unmount)
@@ -470,6 +467,7 @@ function WinScreen({ winner, onClose }) {
       if (Math.random() < 0.06) {
         pos.x = Math.min(window.innerWidth - baseSize, Math.max(0, pos.x + rand(-120, 120)));
         pos.y = Math.min(window.innerHeight - baseSize, Math.max(0, pos.y + rand(-120, 120)));
+      
       }
     }, 400 + Math.random() * 600);
     const animate = () => {
@@ -507,12 +505,13 @@ function WinScreen({ winner, onClose }) {
           <div style={{ position: "absolute", inset: 0 }} />
       <img ref={bouncerRef} src="images/winner-icon.png" alt="Bouncing icon" className="absolute top-0 left-0 rounded-lg shadow-lg pointer-events-none" />
       <div className="relative z-10 text-center">
-        <h1 className="text-8xl font-black text-white animate-pulse [text-shadow:0_8px_16px_rgba(0,0,0,0.5)]"
+        
+        <h1 className="text-5xl sm:text-6xl md:text-8xl font-black text-white animate-pulse [text-shadow:0_8px_16px_rgba(0,0,0,0.5)]"
            style={{ fontFamily: "'Poppins', system-ui, -apple-system, 'Segoe UI', Roboto" }}
         >🎉 WINNER! 🎉
         </h1>
-        <p className="text-6xl text-white mt-6 font-bold [text-shadow:0_4px_8px_rgba(0,0,0,0.5)]">{winner}</p>
-        <p className="text-2xl text-white mt-4 font-semibold animate-bounce">Solved the puzzle! (+${SOLVE_BONUS}!)</p>
+        <p className="text-3xl sm:text-4xl md:text-6xl text-white mt-6 font-bold [text-shadow:0_4px_8px_rgba(0,0,0,0.5)]">{winner}</p>
+        <p className="text-xl md:text-2xl text-white mt-4 font-semibold animate-bounce">Solved the puzzle! (+${SOLVE_BONUS}!)</p>
         <p className="text-sm text-white/90 mt-4 opacity-95">Press <strong>Enter</strong> or <strong>Spacebar</strong> to skip</p>
         <div className="mt-6">
           {/* <button onClick={onClose} className="px-6 py-3 rounded-xl bg-white text-black font-bold">Continue</button> */}
@@ -609,8 +608,8 @@ const PersistentHeader = ({ sfx, phase, backToSetup, toggleFullscreen, awaitingC
   if (shouldHideHeader) return null;
 
   return (
-    <div className="fixed top-4 left-4 right-4 z-[100] flex items-center justify-between gap-3 pointer-events-auto">
-      <div className="flex items-center gap-3">
+    <div className="fixed top-2 left-2 right-2 z-[100] flex items-center justify-between gap-2 pointer-events-auto">
+      <div className="flex items-center gap-2">
         {phase !== "setup" && (
           <button
             onClick={backToSetup}
@@ -621,7 +620,7 @@ const PersistentHeader = ({ sfx, phase, backToSetup, toggleFullscreen, awaitingC
           </button>
         )}
       </div>
-      <div className="flex items-center gap-3 ml-4 mr-4 justify-end">
+      <div className="flex items-center gap-2 justify-end">
         <button
           onClick={sfx.toggleTheme}
           className="px-3 py-2 rounded-lg bg-gradient-to-r from-white/10 to-white/5 border border-white/10 text-sm font-semibold flex items-center gap-2 hover:scale-[1.03] hover:bg-white/20 transition custom-hover"
@@ -631,12 +630,14 @@ const PersistentHeader = ({ sfx, phase, backToSetup, toggleFullscreen, awaitingC
           <span className="text-lg">{sfx.themeOn ? "🔊" : "🔈"}</span>
           <span className="hidden sm:inline">{sfx.themeOn ? "Music On" : "Music Off"}</span>
         </button>
-        <div className="flex items-center gap-2 bg-white/10 px-3 py-2 rounded-lg">
+        <div className="hidden sm:flex items-center gap-2 bg-white/10 px-3 py-2 rounded-lg">
           <label htmlFor="global-volume" className="sr-only">Volume</label>
-          <input id="global-volume" type="range" min="0" max="1" step="0.01" value={sfx.volume} onChange={(e) => sfx.setVolume(parseFloat(e.target.value))} className="w-36" aria-label="Global volume" />
+          <input id="global-volume" type="range" min="0" max="1" step="0.01" value={sfx.volume} onChange={(e) => sfx.setVolume(parseFloat(e.target.value))} className="w-36 md:w-36" aria-label="Global volume" />
         </div>
         <button onClick={toggleFullscreen} className="px-3 py-2 rounded-lg bg-white/10 border border-white/10 text-sm font-semibold hover:scale-[1.03] hover:bg-white/20 transition custom-hover" title={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"} aria-pressed={isFullscreen}>
-          Fullscreen
+         
+         <span className="hidden sm:inline">Fullscreen</span> 
+                    <span className="sm:hidden">FS</span>
         </button>
       </div>
     </div>
@@ -1018,12 +1019,48 @@ useEffect(() => () => {
     return () => document.removeEventListener("fullscreenchange", onFullscreenChange);
   }, []);
 
-  useEffect(() => {
-    const currentSize = zoomed ? ZOOM_WHEEL_PX : BASE_WHEEL_PX;
-    const newSize = isFullscreen ? currentSize * 1.4 : currentSize;
-    setWheelPx(newSize);
-  }, [phase, isFullscreen, zoomed]);
+  // useEffect(() => {
+  //   const currentSize = zoomed ? ZOOM_WHEEL_PX : BASE_WHEEL_PX;
+  //   const newSize = isFullscreen ? currentSize * 1.4 : currentSize;
+  //   setWheelPx(newSize);
+  // }, [phase, isFullscreen, zoomed]);
 
+// MOBILE CHANGE 11:54AM FIX : This effect dynamically calculates the wheel size based on viewport dimensions.
+  useEffect(() => {
+    const updateWheelSize = () => {
+      if (phase === 'play') {
+        const screenWidth = window.innerWidth;
+        const screenHeight = window.innerHeight;
+        
+        // Use Math.min to find the limiting dimension, ensuring the wheel fits.
+        const newSize = Math.min(
+          screenWidth * 0.9,      // Max 90% of screen width
+          screenHeight * 0.45,    // Max 45% of screen height
+          BASE_WHEEL_PX           // Absolute max size on large screens
+        );
+
+        // Apply zoom multiplier if the wheel is zoomed
+        const finalSize = zoomed ? newSize * 1.5 : newSize;
+        setWheelPx(finalSize);
+
+      } else {
+        // Use a fixed size for non-play screens like "setup" or "done"
+        setWheelPx(BASE_WHEEL_PX);
+      }
+    };
+
+    // Call it once to set the initial size
+    updateWheelSize();
+    
+    // Add the event listener to resize the wheel when the window size changes
+    window.addEventListener('resize', updateWheelSize);
+    
+    // Cleanup: remove the event listener when the component unmounts
+    return () => window.removeEventListener('resize', updateWheelSize);
+
+  }, [phase, zoomed]); // The effect re-runs only when phase or zoomed state changes
+
+    
   useEffect(() => {
     let interval;
     if (bonusActive && bonusCountdown > 0) {
@@ -1149,8 +1186,11 @@ useEffect(() => {
     ctx.clearRect(0, 0, W, H);
     const cx = W / 2;
     const cy = H / 2;
-    const pHeight = 40;
-    const pWidth = 30;
+    // const pHeight = 40;
+    // const pWidth = 30;
+    //UPDATES 11:54AM 
+     const pHeight = W * 0.08; // Peg size relative to wheel size
+    const pWidth = W * 0.06;
     const r = W / 2 - pHeight - 5;
     const wedgesToRender = testTshirtMode ? currentWedges.map((w) => (w.t === "tshirt" ? { ...w, size: 3 } : w)) : currentWedges;
     const totalSize = wedgesToRender.reduce((sum, w) => sum + (w.size || 1), 0);
@@ -1248,18 +1288,32 @@ useEffect(() => {
     ctx.restore();
   }
 
+
 function drawBonusWheel() {
   const canvas = bonusSpinnerRef.current;
   if (!canvas) return;
 
   const ctx = canvas.getContext('2d');
-  const size = 400;
+  const size = 400; // This is your internal drawing size
+  const displaySize = 800; // Let's try drawing on a larger internal canvas
+
+  // Set canvas dimensions for high-resolution drawing
+  canvas.width = displaySize;
+  canvas.height = displaySize;
+
+  // Scale down the canvas element via CSS for display, if it's not already handled.
+  // In React, you'd typically apply this via a ref.style or Tailwind/CSS class.
+  // Example for direct manipulation (consider if this is the right place in React):
+  canvas.style.width = `${size}px`;
+  canvas.style.height = `${size}px`;
+  
+  // Scale the context to draw everything at the higher resolution
+  ctx.scale(displaySize / size, displaySize / size);
+
+
   const cx = size / 2;
   const cy = size / 2;
   const radius = size / 2 - 40;
-
-  canvas.width = size;
-  canvas.height = size;
 
   ctx.clearRect(0, 0, size, size);
 
@@ -1271,7 +1325,6 @@ function drawBonusWheel() {
   const colors = ['#ff6b6b', '#4ecdc4', '#45b7d1', '#f9ca24', '#6c5ce7'];
 
   ctx.save();
-  // rotate whole wheel by current spinner angle around center
   ctx.translate(cx, cy);
   ctx.rotate((bonusSpinnerAngle * Math.PI) / 180);
   ctx.translate(-cx, -cy);
@@ -1281,12 +1334,10 @@ function drawBonusWheel() {
     const endDeg   = startDeg + dir * sectionAngle;
 
     const start = (startDeg * Math.PI) / 180;
-    const end   = (endDeg   * Math.PI) / 180;
+    const end   = (endDeg * Math.PI) / 180;
 
-    // wedge
     ctx.beginPath();
     ctx.moveTo(cx, cy);
-    // NOTE: anticlockwise = !BONUS_CW
     ctx.arc(cx, cy, radius, start, end, !BONUS_CW);
     ctx.closePath();
     ctx.fillStyle = colors[i % colors.length];
@@ -1295,40 +1346,51 @@ function drawBonusWheel() {
     ctx.lineWidth = 3;
     ctx.stroke();
 
-    // label at wedge center
     const midDeg = startDeg + dir * (sectionAngle / 2);
     const midRad = (midDeg * Math.PI) / 180;
+    const label = BONUS_PRIZES[i];
+
     ctx.save();
-    ctx.translate(
-      cx + Math.cos(midRad) * (radius * 0.62),
-      cy + Math.sin(midRad) * (radius * 0.62)
-    );
-    ctx.fillStyle = '#fff';
-    ctx.font = 'bold 18px Arial Black, Impact, sans-serif';
+    ctx.translate(cx, cy);
+    ctx.rotate(midRad);
+
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.shadowColor = 'rgba(0,0,0,0.8)';
-    ctx.shadowOffsetX = 2;
-    ctx.shadowOffsetY = 2;
-    ctx.shadowBlur = 3;
-    ctx.strokeStyle = 'rgba(0,0,0,0.25)';
-    ctx.lineWidth = 4;
-    ctx.strokeText(BONUS_PRIZES[i], 0, 0);
-    ctx.fillText(BONUS_PRIZES[i], 0, 0);
+    ctx.fillStyle = '#fff';
+    // --- CHANGED FONT SIZE AND TYPE ---
+    ctx.font = 'bold 19px Roboto, Arial, sans-serif'; // Increased font size, changed font family
+    // --- SLIGHTLY ADJUSTED SHADOW FOR A SOFTER LOOK ---
+    ctx.shadowColor = 'rgba(0,0,0,0.6)'; // Slightly darker shadow
+    ctx.shadowOffsetX = 3; // Increased offset for shadow
+    ctx.shadowOffsetY = 3; // Increased offset for shadow
+    ctx.shadowBlur = 6; // Increased blur for a softer shadow
+
+    const textRadius = radius * 0.65;
+
+    const normalizedMidRad = (midRad % (2 * Math.PI) + (2 * Math.PI)) % (2 * Math.PI);
+    const isLeftHalf = normalizedMidRad > Math.PI / 2 && normalizedMidRad < (3 * Math.PI) / 2;
+
+    if (isLeftHalf) {
+      ctx.rotate(Math.PI);
+      ctx.fillText(label, -textRadius, 0);
+    } else {
+      ctx.fillText(label, textRadius, 0);
+    }
+    
     ctx.restore();
   }
 
-  // center hub (optional)
+  ctx.restore();
+
+  // Draw the center hub
   ctx.beginPath();
   ctx.arc(cx, cy, radius * 0.1, 0, Math.PI * 2);
   ctx.fillStyle = '#ffffff';
   ctx.fill();
   ctx.strokeStyle = '#00000022';
   ctx.stroke();
-
-  ctx.restore();
-
-
+  
+  // Draw the top pointer
   ctx.beginPath();
   ctx.moveTo(cx, 50);
   ctx.lineTo(cx - 15, 20);
@@ -1340,7 +1402,6 @@ function drawBonusWheel() {
   ctx.lineWidth = 2;
   ctx.stroke();
 }
-
 
   function wedgeIndexForAngle(a) {
     const two = Math.PI * 2;
@@ -1497,16 +1558,30 @@ const endCharge = () => {
       endCharge();
     };
 
-    button.addEventListener('touchstart', handleTouchStart, { passive: false });
-    button.addEventListener('touchend', handleTouchEnd, { passive: false });
+ 
+      // Use { passive: false } to indicate that we will call preventDefault.
 
-    return () => {
-      button.removeEventListener('touchstart', handleTouchStart);
-      button.removeEventListener('touchend', handleTouchEnd);
-    };
-  }, [canSpin, startCharge, endCharge]);
+  button.addEventListener('touchstart', handleTouchStart, { passive: false });
 
- // PASTE THE NEW useEffect FOR THE OVERLAY HERE
+  button.addEventListener('touchend', handleTouchEnd, { passive: false });
+
+  button.addEventListener('touchcancel', handleTouchEnd, { passive: false }); // Also end charge if touch is interrupted
+
+
+
+  return () => {
+
+    button.removeEventListener('touchstart', handleTouchStart);
+
+    button.removeEventListener('touchend', handleTouchEnd);
+
+    button.removeEventListener('touchcancel', handleTouchEnd);
+
+  };
+
+}, [canSpin, startCharge, endCharge]);
+
+
   useEffect(() => {
     const overlay = blockingOverlayRef.current;
     if (!overlay) return;
@@ -3437,21 +3512,21 @@ const BonusResultModal = ({ result }) => {
             <div className="text-2xl font-bold text-pink-600">${gameStats.maxComeback.toLocaleString()}</div>
             <div className="text-sm">Biggest Comeback</div>
           </div> */}
-          <div className="bg-gray-100 p-4 rounded-lg">
+          {/* <div className="bg-gray-100 p-4 rounded-lg"> */}
             {/* <div className="text-2xl font-bold text-purple-600">
               {gameStats.turnCount > 0 ? Math.round(gameStats.totalTurnTime / gameStats.turnCount / 1000) + "s" : "N/A"}
             </div> */}
           
-           <div className="bg-gray-100 p-4 rounded-lg">
+           {/* <div className="bg-gray-100 p-4 rounded-lg">
   <div className="text-2xl font-bold text-purple-600">
     {Number.isFinite(gameStats.totalTurnTime) && (gameStats.turnCount || 0) > 0
       ? Math.round((gameStats.totalTurnTime || 0) / (gameStats.turnCount || 1) / 1000) + "s"
       : "N/A"}
   </div>
   <div className="text-sm">Avg Turn Time</div>
-</div>
+</div> */}
 
-          </div>
+          {/* </div> */}
           {/* <div className="bg-gray-100 p-4 rounded-lg">
             <div className="text-2xl font-bold text-teal-600">
               {(gameStats.vowelSuccesses + gameStats.vowelFailures) > 0 
@@ -3493,14 +3568,14 @@ const BonusResultModal = ({ result }) => {
               {(gameStats.teamStats[team.name]?.totalTurns || 0) > 0 ? Math.round(team.total / (gameStats.teamStats[team.name]?.totalTurns || 1)) : 0} pts/action
             </span>
     </div>
-  <div className="flex justify-between">
+  {/* <div className="flex justify-between">
   <span>Avg Turn Time:</span>
   <span className="font-bold">
     {Number.isFinite(gameStats.teamStats?.[team.name]?.avgTurnTime)
       ? Math.round(gameStats.teamStats[team.name].avgTurnTime / 1000) + "s"
       : "N/A"}
   </span>
-</div>
+</div> */}
 
   <div className="flex justify-between"><span>Correct Letter Streak:</span><span className="font-bold">{gameStats.teamStats[team.name]?.maxConsecutive || 0}</span></div>
   <div className="flex justify-between"><span>Vowels Bought:</span><span className="font-bold">{gameStats.teamStats[team.name]?.vowelsBought || 0}</span></div>
@@ -4042,30 +4117,16 @@ if (phase === "setup") {
               />
             </div>
 
-            <div className="flex justify-center flex-wrap gap-4 items-center">
-              <button
-          
-ref={spinButtonRef}
-                onMouseDown={startCharge}
-                onMouseUp={endCharge}
-                onMouseLeave={endCharge}
-                
-                disabled={!canSpin}
-                style={
-                  canSpin
-                    ? {
-                        backgroundImage: `linear-gradient(to right, ${fillBgColor} ${spinPower}%, ${baseBgColor} ${spinPower}%)`,
-                        transition: snapChargeToZero ? "none" : "background-image 80ms linear",
-                      }
-                    : {}
-                }
-                className={cls(
-                  "rounded-xl font-bold text-xl px-8 py-4 transition-colors custom-hover",
-                  !canSpin ? "bg-gray-700/60 text-gray-400 cursor-not-allowed" : "text-white hover:brightness-110"
-                )}
-              >
-                <span className="select-none">SPIN (Hold)</span>
-              </button>
+       
+                {/* MOBILE CHANGE: Buttons will wrap nicely on small screens */}
+
+                <div className="flex justify-center flex-wrap gap-2 sm:gap-4 items-center">
+
+                    <button ref={spinButtonRef} onMouseDown={startCharge} onMouseUp={endCharge} onMouseLeave={endCharge} disabled={!canSpin} style={canSpin ? { backgroundImage: `linear-gradient(to right, rgba(4,120,87,0.95) ${spinPower}%, #22c55e ${spinPower}%)`, transition: snapChargeToZero ? "none" : "background-image 80ms linear" } : {}} className={cls("rounded-xl font-bold text-lg sm:text-xl px-6 py-3 sm:px-8 sm:py-4 transition-colors custom-hover", !canSpin ? "bg-gray-700/60 text-gray-400 cursor-not-allowed" : "text-white hover:brightness-110")}>
+
+                        SPIN
+
+                    </button>
 
 
 
