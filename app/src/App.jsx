@@ -13,7 +13,7 @@ const SPIN_DURATION_MS = 5200;
 const SPIN_SETTLE_MS = 700;       
 const POST_LAND_PAUSE_MS = 450;   
 
-const PRIZE_INDEX_CORRECTION = -2; 
+const PRIZE_INDEX_CORRECTION = 0; 
 
 const VOWEL_COST = 200;
 
@@ -48,8 +48,8 @@ const WEDGES = [
   { t: "cash", v: 125, c: "#4F9F4F" },
 ];
 
-const VOWELS = new Set(["A", "E", "I", "O", "U"]);
-const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
+const VOWELS = new Set(["A", "E", "I", "O", "U", "J"]);
+const LETTERS = "ABCDEFGHIKLMNOPQRSTUVWXYZ".split("");
 const ZOOM_WHEEL_PX = BASE_WHEEL_PX * 1.5;
 const BONUS_PRIZES = ["PIN", "STICKER", "T-SHIRT", "MAGNET", "KEYCHAIN"];
 const SOLVE_REVEAL_INTERVAL = 650;
@@ -529,15 +529,16 @@ function WinScreen({ winner, onClose }) {
   }, [winner, onClose]);
 
   return (
-    <div
-      className={cls(
-        "fixed inset-0 z-[60] flex flex-col items-center justify-center overflow-hidden backdrop-blur-sm",
-        GRADIENT
-      )}
-      onClick={onClose}                 // 👈 NEW: click backdrop to skip
-      role="button"
-      aria-label="Continue"
-    >
+   <div
+  className={cls(
+    "fixed inset-0 z-[60] flex flex-col items-center justify-center overflow-hidden backdrop-blur-sm",
+    GRADIENT
+  )}
+  onClick={onClose}
+  onTouchStart={(e) => { e.preventDefault(); onClose?.(); }}
+  role="button"
+  aria-label="Continue"
+>
       <div style={{ position: "absolute", inset: 0 }} />
       <img
         ref={bouncerRef}
@@ -699,6 +700,211 @@ const allowLetterKey = (e) => {
   }
 };
 
+function BonusPrizeShuffler({
+  displayBonusPlayer,
+  bonusPrize,
+  setBonusPrize,
+  bonusSpinnerSpinning,
+  setBonusSpinnerSpinning,
+  sfx,
+  setBonusHideBoard,
+  setShowBonusLetterModal,
+  setBonusLetterType,
+  setPhase,
+  setBonusRound,
+}) {
+  const [previewPrize, setPreviewPrize] = React.useState(null);
+  const [isLocked, setIsLocked] = React.useState(false);   // <-- immediate UI lock
+  const shuffleIntervalRef = React.useRef(null);
+  const finishTimeoutRef = React.useRef(null);
+  const pauseTimeoutRef = React.useRef(null);
+  const mountedRef = React.useRef(true);
+  const startRef = React.useRef(false); // <-- synchronous guard
+
+  const PAUSE_AFTER_LAND_MS = 3000; // show final prize for 1s
+
+  React.useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      // clear timers on unmount
+      if (shuffleIntervalRef.current) {
+        clearInterval(shuffleIntervalRef.current);
+        shuffleIntervalRef.current = null;
+      }
+      if (finishTimeoutRef.current) {
+        clearTimeout(finishTimeoutRef.current);
+        finishTimeoutRef.current = null;
+      }
+      if (pauseTimeoutRef.current) {
+        clearTimeout(pauseTimeoutRef.current);
+        pauseTimeoutRef.current = null;
+      }
+      // reset entry guard so re-mount can work
+      startRef.current = false;
+      try { sfx?.stop?.("spin"); } catch (e) {}
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const startShuffle = () => {
+    // Synchronous re-entry guard: prevent double-clicks immediately
+    if (startRef.current) {
+      console.log("[Shuffler] startShuffle ignored - already started");
+      return;
+    }
+    // Defensive: respect external flags too
+    if (bonusSpinnerSpinning || bonusPrize) {
+      console.log("[Shuffler] startShuffle aborted (spinner running or prize already set)");
+      return;
+    }
+
+    startRef.current = true;        // prevent re-entry synchronously
+    setIsLocked(true);              // immediately disable button in UI
+    console.log("[Shuffler] startShuffle -> starting spinning preview");
+
+    // cleanup any previous timers (defensive)
+    if (shuffleIntervalRef.current) {
+      clearInterval(shuffleIntervalRef.current);
+      shuffleIntervalRef.current = null;
+    }
+    if (finishTimeoutRef.current) {
+      clearTimeout(finishTimeoutRef.current);
+      finishTimeoutRef.current = null;
+    }
+    if (pauseTimeoutRef.current) {
+      clearTimeout(pauseTimeoutRef.current);
+      pauseTimeoutRef.current = null;
+    }
+
+    setPreviewPrize(BONUS_PRIZES[Math.floor(Math.random() * BONUS_PRIZES.length)]);
+    setBonusSpinnerSpinning(true);
+    try { sfx?.play?.("spin"); } catch (e) {}
+
+    // flicker the preview quickly while "shuffling"
+    shuffleIntervalRef.current = setInterval(() => {
+      setPreviewPrize(BONUS_PRIZES[Math.floor(Math.random() * BONUS_PRIZES.length)]);
+    }, 70);
+
+    // after short duration choose final prize
+    finishTimeoutRef.current = setTimeout(() => {
+      // stop flicker
+      if (shuffleIntervalRef.current) {
+        clearInterval(shuffleIntervalRef.current);
+        shuffleIntervalRef.current = null;
+      }
+
+      const finalPrize = BONUS_PRIZES[Math.floor(Math.random() * BONUS_PRIZES.length)];
+      console.log("[Shuffler] finalPrize ->", finalPrize);
+
+      // show the final prize locally (preview), do NOT set parent prize yet
+      setPreviewPrize(finalPrize);
+
+      // stop spin sound and play ding
+      try { sfx?.stop?.("spin"); } catch (e) {}
+      try { sfx?.play?.("ding"); } catch (e) {}
+
+      // clear the spinning flag (keeps shuffler visible because we haven't set parent prize)
+      setBonusSpinnerSpinning(false);
+
+      // Pause so users can see the landed prize, then set parent prize & open consonants
+      pauseTimeoutRef.current = setTimeout(() => {
+        pauseTimeoutRef.current = null;
+
+        // defensive phase/bonusRound ensure
+        try {
+          if (typeof setPhase === "function") setPhase("bonus");
+          if (typeof setBonusRound === "function") setBonusRound(true);
+        } catch (e) {
+          console.warn("[Shuffler] error setting phase/bonusRound", e);
+        }
+
+        // 1) set the parent-level bonusPrize (this may flip other UI)
+        try {
+          setBonusPrize(finalPrize);
+          console.log("[Shuffler] parent bonusPrize set ->", finalPrize);
+        } catch (e) {
+          console.warn("[Shuffler] failed to set parent bonusPrize", e);
+        }
+
+        // 2) open the consonant modal
+        try {
+          setBonusHideBoard(true);
+          setBonusLetterType("consonant");
+          // small micro-delay to avoid React batching oddities
+          setTimeout(() => {
+            setShowBonusLetterModal(true);
+            console.log("[Shuffler] setShowBonusLetterModal(true)");
+            // focus any input if present after a short wait
+            setTimeout(() => {
+              const el = document.querySelector("#bonus-inline-solve-input") || document.querySelector(".bonus-letter-initial-focus");
+              if (el) el.focus?.();
+            }, 40);
+          }, 30);
+        } catch (e) {
+          console.warn("[Shuffler] failed to open consonant modal", e);
+        }
+
+        // Keep startRef true so further clicks are ignored; the parent state
+        // (bonusPrize) will also keep the button disabled. No need to reset isLocked.
+      }, PAUSE_AFTER_LAND_MS);
+
+      finishTimeoutRef.current = null;
+    }, 2400); // shuffle duration
+  };
+
+  const buttonLabel = bonusPrize
+    ? `PRIZE SELECTED: ${bonusPrize}`
+    : bonusSpinnerSpinning
+    ? "SHUFFLING..."
+    : "🎁 SELECT PRIZE 🎁";
+
+  return (
+    <div className="max-w-7xl w-full mx-auto text-center py-8 flex flex-col items-center justify-center min-h-screen">
+      <div className="mb-8">
+        <h1 className="text-6xl font-black mb-4 text-white [text-shadow:0_8px_16px_rgba(0,0,0,0.5)]">🎊 BONUS ROUND 🎊</h1>
+        <p className="text-3xl font-bold text-yellow-300 [text-shadow:0_4px_8px_rgba(0,0,0,0.5)]">Good luck: {displayBonusPlayer}!</p>
+        <p className="text-xl text-white/90 mt-4">Click the button to see what prize you're playing for!</p>
+      </div>
+
+      <div className="mb-8 h-32 flex items-center justify-center">
+        <div aria-live="polite" aria-atomic="true" className="text-center">
+          {bonusPrize ? (
+            <div className="text-6xl font-black text-white">{bonusPrize}</div>
+          ) : bonusSpinnerSpinning ? (
+            <div className="text-6xl font-black text-white animate-pulse">{previewPrize || "..."}</div>
+          ) : (
+            <div className="text-4xl font-bold text-white/60">{previewPrize || "???"}</div>
+          )}
+        </div>
+      </div>
+
+      <div className="flex flex-col items-center gap-4">
+        <button
+          onClick={startShuffle}
+          disabled={isLocked || bonusSpinnerSpinning || !!bonusPrize}
+          aria-busy={bonusSpinnerSpinning}
+          className={`px-12 py-6 rounded-2xl text-2xl font-extrabold text-white transition-all duration-300 ${
+            isLocked || bonusSpinnerSpinning || bonusPrize
+              ? "bg-gray-400 cursor-not-allowed"
+              : "bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 hover:scale-105 shadow-2xl"
+          }`}
+        >
+          {buttonLabel}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+
+
+
+
+
+
+
+
 export default function App() {
   const [phase, setPhase] = useState("setup");
   const [teamCount, setTeamCount] = useState(3);
@@ -710,10 +916,22 @@ export default function App() {
   const [letters, setLetters] = useState(() => new Set());
   const [board, setBoard] = useState(() => normalizeAnswer(FALLBACK[0].answer));
   const [category, setCategory] = useState(FALLBACK[0].category || "PHRASE");
+
   const wheelContainerRef = useRef(null);
   const zoomContainerRef = useRef(null);
   const spinButtonRef = useRef(null); // <-- ADD THIS LINE
 const blockingOverlayRef = useRef(null);
+ const mobileCanvasRef = useRef(null);
+  const mobileSpinButtonRef = useRef(null);
+
+
+
+
+// Desktop-specific refs
+const desktopCanvasRef = useRef(null);
+const desktopSpinButtonRef = useRef(null);
+
+
 
   const [teams, setTeams] = useState([
     { name: "Team 1", total: 0, round: 0, prizes: [], holding: [] },
@@ -1074,50 +1292,45 @@ useEffect(() => () => {
     return () => document.removeEventListener("fullscreenchange", onFullscreenChange);
   }, []);
 
-  // useEffect(() => {
-  //   const currentSize = zoomed ? ZOOM_WHEEL_PX : BASE_WHEEL_PX;
-  //   const newSize = isFullscreen ? currentSize * 1.4 : currentSize;
-  //   setWheelPx(newSize);
-  // }, [phase, isFullscreen, zoomed]);
+ 
 
-// MOBILE CHANGE 11:54AM FIX : This effect dynamically calculates the wheel size based on viewport dimensions.
+// NEW: This effect conditionally resizes the wheel ONLY on mobile screens.
   useEffect(() => {
     const updateWheelSize = () => {
       if (phase === 'play') {
         const screenWidth = window.innerWidth;
         const screenHeight = window.innerHeight;
-        
-        // Use Math.min to find the limiting dimension, ensuring the wheel fits.
-        const newSize = Math.min(
-          screenWidth * 0.9,      // Max 90% of screen width
-          screenHeight * 0.65,    // Max 45% of screen height
-          BASE_WHEEL_PX           // Absolute max size on large screens
-        );
 
-    // Apply zoom multiplier, but cap it at 95% of screen width for mobile lightbox
-      const potentialZoomSize = newSize * 1.5;
-      const finalSize = zoomed 
-        ? Math.min(potentialZoomSize, screenWidth * 0.95) 
-        : newSize;
-      setWheelPx(finalSize);
+        let newSize;
+
+        // Check if we are on a "mobile" screen size (less than 1024px, Tailwind's 'lg' breakpoint)
+        if (screenWidth < 1024) {
+          // On mobile, use the compact sizing logic
+          newSize = Math.min(
+            screenWidth * 0.9,
+            screenHeight * 0.45 
+          );
+        } else {
+          // On desktop, use the original, large, fixed size
+          newSize = BASE_WHEEL_PX;
+        }
+
+        // The zoom logic remains the same
+        const potentialZoomSize = newSize * 1.5;
+        const finalSize = zoomed 
+          ? Math.min(potentialZoomSize, screenWidth * 0.95) 
+          : newSize;
+        setWheelPx(finalSize);
 
       } else {
-        // Use a fixed size for non-play screens like "setup" or "done"
         setWheelPx(BASE_WHEEL_PX);
       }
     };
 
-    // Call it once to set the initial size
     updateWheelSize();
-    
-    // Add the event listener to resize the wheel when the window size changes
     window.addEventListener('resize', updateWheelSize);
-    
-    // Cleanup: remove the event listener when the component unmounts
     return () => window.removeEventListener('resize', updateWheelSize);
-
-  }, [phase, zoomed]); // The effect re-runs only when phase or zoomed state changes
-
+  }, [phase, zoomed]);
     
   useEffect(() => {
     let interval;
@@ -1228,7 +1441,11 @@ useEffect(() => {
   }, [showWinScreen, sfx]);
 
   function drawWheel(rot = 0) {
-    const canvas = zoomed ? zoomCanvasRef.current : canvasRef.current;
+     // NEW: Determine which canvas ref to use based on screen size
+    const isMobile = window.innerWidth < 1024;
+    
+    const canvasToDraw = isMobile ? mobileCanvasRef.current : canvasRef.current;
+const canvas = zoomed ? zoomCanvasRef.current : canvasToDraw;
     if (!canvas) return;
     const dpr = window.devicePixelRatio || 1;
     const W = wheelPx;
@@ -1599,45 +1816,35 @@ const endCharge = () => {
 };
 
 
-  // PASTE THE useEffect BLOCK HERE
+// NEW: This useEffect now applies touch listeners to BOTH the mobile and desktop spin buttons
   useEffect(() => {
-    const button = spinButtonRef.current;
-    if (!button) return;
+    const buttons = [spinButtonRef.current, mobileSpinButtonRef.current].filter(Boolean);
+    if (buttons.length === 0) return;
 
     const handleTouchStart = (e) => {
-      if (button.disabled) return;
       e.preventDefault();
       startCharge();
     };
 
     const handleTouchEnd = (e) => {
-      if (button.disabled) return;
       e.preventDefault();
       endCharge();
     };
 
- 
-      // Use { passive: false } to indicate that we will call preventDefault.
+    buttons.forEach(button => {
+        button.addEventListener('touchstart', handleTouchStart, { passive: false });
+        button.addEventListener('touchend', handleTouchEnd, { passive: false });
+        button.addEventListener('touchcancel', handleTouchEnd, { passive: false });
+    });
 
-  button.addEventListener('touchstart', handleTouchStart, { passive: false });
-
-  button.addEventListener('touchend', handleTouchEnd, { passive: false });
-
-  button.addEventListener('touchcancel', handleTouchEnd, { passive: false }); // Also end charge if touch is interrupted
-
-
-
-  return () => {
-
-    button.removeEventListener('touchstart', handleTouchStart);
-
-    button.removeEventListener('touchend', handleTouchEnd);
-
-    button.removeEventListener('touchcancel', handleTouchEnd);
-
-  };
-
-}, [canSpin, startCharge, endCharge]);
+    return () => {
+      buttons.forEach(button => {
+        button.removeEventListener('touchstart', handleTouchStart);
+        button.removeEventListener('touchend', handleTouchEnd);
+        button.removeEventListener('touchcancel', handleTouchEnd);
+      });
+    };
+  }, [canSpin, startCharge, endCharge]);
 
 
   useEffect(() => {
@@ -2546,12 +2753,21 @@ const SPIN_DURATION_MS = 5200;
 function spinBonusWheel() {
   if (bonusSpinnerSpinning) return;
 
+  // PREDETERMINE THE PRIZE
+  const chosenPrizeIndex = Math.floor(Math.random() * BONUS_PRIZES.length);
+  const chosenPrize = BONUS_PRIZES[chosenPrizeIndex];
+
   setBonusSpinnerSpinning(true);
   try { sfx.play("spin"); } catch (_) {}
 
   const spins = Math.floor(Math.random() * (SPIN_MAX_TURNS - SPIN_MIN_TURNS + 1)) + SPIN_MIN_TURNS;
-  const finalRotation = Math.floor(Math.random() * 360);
-  const totalRotation = spins * 360 + finalRotation;
+
+// Calculate exact angle to land on chosen prize
+  const sections = BONUS_PRIZES.length;
+  const sectionAngle = 360 / sections;
+  const targetAngle = chosenPrizeIndex * sectionAngle + sectionAngle / 2;
+    // Add multiple rotations plus the target
+  const totalRotation = spins * 360 + targetAngle;
 
   const startTime = performance.now();
   const startAngle = bonusSpinnerAngle;
@@ -2560,55 +2776,29 @@ function spinBonusWheel() {
   const animate = (now) => {
     const progress = Math.min((now - startTime) / SPIN_DURATION_MS, 1);
     const currentAngle = startAngle + totalRotation * easeOutCubic(progress);
-    setBonusSpinnerAngle(currentAngle);
+    setBonusSpinnerAngle(currentAngle % 360);
 
     if (progress < 1) {
       requestAnimationFrame(animate);
       return;
     }
 
-    // --- select prize under top pointer (uses same origin as draw) ---
-    const finalDeg = ((currentAngle % 360) + 360) % 360; // 0..359
-    const sections = BONUS_PRIZES.length;
-    const sectionAngle = 360 / sections;
-
-    const angleUnderPointer = BONUS_CW
-      ? (360 - finalDeg - BONUS_START_DEG + 360) % 360
-      : (finalDeg - BONUS_START_DEG + 360) % 360;
-
- const rawIndex = Math.floor((angleUnderPointer + sectionAngle / 2) / sectionAngle) % sections;
-const prizeIndex = (rawIndex + PRIZE_INDEX_CORRECTION + sections) % sections;
-const selectedPrize = BONUS_PRIZES[prizeIndex];
-setBonusPrize(selectedPrize);
-console.log('BONUS DEBUG', {
-  finalDeg,
-  angleUnderPointer,
-  rawIndex,
-  correction: PRIZE_INDEX_CORRECTION,
-  prizeIndex,
-  label: BONUS_PRIZES[prizeIndex]
-});
-
-    // snap instantly to slice center (no linger)
-    const centeredUnderPointer = prizeIndex * sectionAngle + sectionAngle / 2;
-    const desiredFinalDeg = BONUS_CW
-      ? (360 - ((centeredUnderPointer + BONUS_START_DEG) % 360) + 360) % 360
-      : ((centeredUnderPointer + BONUS_START_DEG) % 360 + 360) % 360;
-
-    const delta = ((finalDeg - desiredFinalDeg + 540) % 360) - 180;
-    setBonusSpinnerAngle(currentAngle - delta);
-
+ // Just set the predetermined prize - no calculations needed!
+    setBonusPrize(chosenPrize);
+    
     try { sfx.stop("spin"); } catch (_) {}
     setBonusSpinnerSpinning(false);
 
-    // open modal immediately
-    setShowBonusSpinner(false);
-    setBonusHideBoard(true);
-    setShowBonusLetterModal(true);
-    setBonusLetterType("consonant");
+  // Proceed to letter selection
+    setTimeout(() => {
+      setShowBonusSpinner(false);
+      setBonusHideBoard(true);
+      setShowBonusLetterModal(true);
+      setBonusLetterType("consonant");
+    }, 500);
   };
 
-  requestAnimationFrame(animate);
+    requestAnimationFrame(animate);
 }
 
 
@@ -2942,26 +3132,24 @@ const TeamCard = ({ t, i }) => {
   return (
     <div
       className={cls(
-        // removed hover scale + transition so hovering DOES NOT transform the card
-        "rounded-2xl p-3 sm:p-4 backdrop-blur-md bg-white/10 fullscreen:p-6 flex flex-col justify-between min-h-[84px] transform-gpu",
-        // make the active highlight an inset ring so it hugs the box
-        i === active ? "ring-4 ring-inset ring-yellow-300 ring-offset-0" : ""
+        // Smaller padding and min-height on mobile
+        "rounded-lg sm:rounded-2xl p-2 sm:p-3 lg:p-4 backdrop-blur-md bg-white/10 flex flex-col justify-between min-h-[60px] sm:min-h-[84px] transform-gpu",
+        i === active ? "ring-2 sm:ring-4 ring-inset ring-yellow-300 ring-offset-0" : ""
       )}
-      // ensure cursor isn't a pointer when hovering the card
       style={{ cursor: "default" }}
       aria-current={i === active ? "true" : "false"}
     >
       <div className="flex justify-between items-start">
         <div>
-          <div className="text-xs uppercase tracking-widest opacity-90 select-none">{t.name}</div>
-          <div className="text-xs opacity-70">Total: ${t.total.toLocaleString()}</div>
+          <div className="text-[10px] sm:text-xs uppercase tracking-widest opacity-90 select-none">{t.name}</div>
+          <div className="text-[10px] sm:text-xs opacity-70">Total: ${t.total.toLocaleString()}</div>
         </div>
-        <div className="flex flex-col items-end gap-1">
+        <div className="flex flex-col items-end gap-0.5 sm:gap-1">
           {Object.entries(prizeCounts).map(([prizeLabel, count]) => (
             <div
               key={`${prizeLabel}-${count}`}
               className={cls(
-                "px-2 py-1 text-xs font-bold rounded-md",
+                "px-1 sm:px-2 py-0.5 sm:py-1 text-[9px] sm:text-xs font-bold rounded-md",
                 prizeLabel === "T-SHIRT" ? "bg-purple-600" :
                 prizeLabel === "PIN" ? "bg-red-600" :
                 prizeLabel === "STICKER" ? "bg-blue-600" :
@@ -2973,9 +3161,9 @@ const TeamCard = ({ t, i }) => {
             </div>
           ))}
           {Array.isArray(t.holding) && t.holding.length > 0 && phase === "play" && (
-            <div className="flex gap-2 mt-2 flex-wrap">
+            <div className="flex gap-1 sm:gap-2 mt-1 sm:mt-2 flex-wrap">
               {Object.entries(holdingCounts).map(([label, cnt]) => (
-                <div key={`holding-${label}`} className="px-2 py-1 text-[10px] font-extrabold rounded-md bg-purple-700/80 text-white">
+                <div key={`holding-${label}`} className="px-1 sm:px-2 py-0.5 sm:py-1 text-[8px] sm:text-[10px] font-extrabold rounded-md bg-purple-700/80 text-white">
                   HOLDING {label}{cnt > 1 ? ` x${cnt}` : ""}
                 </div>
               ))}
@@ -2983,7 +3171,7 @@ const TeamCard = ({ t, i }) => {
           )}
         </div>
       </div>
-      <div className="mt-1 text-2xl sm:text-3xl font-black tabular-nums fullscreen:text-4xl">${t.round.toLocaleString()}</div>
+      <div className="mt-0.5 sm:mt-1 text-lg sm:text-2xl lg:text-3xl font-black tabular-nums">${t.round.toLocaleString()}</div>
     </div>
   );
 };
@@ -3408,24 +3596,32 @@ const BonusLetterModal = () => {
         handleBonusSolve();
       }
     };
-    return (
-      <div className="w-full max-w-3xl mx-auto mt-6 p-6 bg-white rounded-2xl shadow-lg">
-        <h2 className="text-xl sm:text-2xl font-bold text-black text-center">Solve to win {bonusPrize}!</h2>
-        <div className="flex flex-col items-center gap-3 mt-3">
-          <div className="text-3xl font-black text-red-500">{bonusCountdown}</div>
-          <p className="text-sm text-gray-600 text-center">The 20s countdown already began when READY was pressed. Press Enter or click Submit when done.</p>
-          <input id="bonus-inline-solve-input" ref={inputRef} type="text" 
+return (
+  <div className="fixed inset-x-0 bottom-0 z-[55] bg-white rounded-t-2xl shadow-lg safe-bottom">
+    <div className="p-4 max-w-3xl mx-auto">
+      <h2 className="text-lg sm:text-xl font-bold text-black text-center">Solve to win {bonusPrize}!</h2>
+      <div className="flex flex-col items-center gap-2 mt-2">
+        <div className="text-2xl sm:text-3xl font-black text-red-500">{bonusCountdown}</div>
+        <input 
+          id="bonus-inline-solve-input" 
+          ref={inputRef} 
+          type="text" 
           value={bonusGuess} 
           onChange={onInputChange} 
           onKeyDown={onKeyDown} 
           placeholder="Enter your guess" 
-          className="w-full px-4 py-3 rounded-lg border-2 border-blue-300 text-lg" 
-          autoFocus />
-          <div className="flex items-center gap-3">
-            <button onClick={handleBonusSolve} className="px-6 py-2 rounded-lg bg-purple-600 text-white font-semibold">Submit</button>
-          </div>
-        </div>
+          className="w-full px-3 py-2 rounded-lg border-2 border-blue-300 text-base sm:text-lg" 
+          autoFocus 
+        />
+        <button 
+          onClick={handleBonusSolve} 
+          className="px-6 py-2 rounded-lg bg-purple-600 text-white font-semibold w-full sm:w-auto"
+        >
+          Submit
+        </button>
       </div>
+    </div>
+  </div>
     );
   };
 
@@ -3707,43 +3903,20 @@ if (phase === "bonus") {
       />
       
       {/* Prize Spin State - Show bonus wheel and spin button */}
-      {bonusState === "prize_spin" && !showBonusSelector && (
-        <div className="max-w-7xl w-full mx-auto text-center py-8 flex flex-col items-center justify-center min-h-screen">
-          <div className="mb-8">
-            <h1 className="text-6xl font-black mb-4 text-white [text-shadow:0_8px_16px_rgba(0,0,0,0.5)]">🎊 BONUS ROUND 🎊</h1>
-            <p className="text-3xl font-bold text-yellow-300 [text-shadow:0_4px_8px_rgba(0,0,0,0.5)]">Good luck: {displayBonusPlayer}!</p>
-            <p className="text-xl text-white/90 mt-4">Spin the wheel to see what prize you're playing for!</p>
-          </div>
-          
-          {/* Bonus Prize Wheel */}
-          <div className="relative mb-8">
-            <canvas 
-              ref={bonusSpinnerRef} 
-              className="drop-shadow-2xl"
-              style={{ width: '400px', height: '400px' }}
-            />
-          </div>
-          
-          <button 
-            onClick={spinBonusWheel}
-            disabled={bonusSpinnerSpinning || bonusPrize}
-            className={`px-12 py-6 rounded-2xl text-2xl font-extrabold text-white transition-all duration-300 ${
-              bonusSpinnerSpinning || bonusPrize
-                ? 'bg-gray-400 cursor-not-allowed'
-                : 'bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 hover:scale-105 shadow-2xl animate-pulse'
-            }`}
-          >
-            {bonusSpinnerSpinning ? 'SPINNING...' : bonusPrize ? `YOU'RE PLAYING FOR: ${bonusPrize}` : '🎁 SPIN FOR PRIZE 🎁'}
-          </button>
-          
-          {bonusPrize && (
-            <div className="mt-6 p-4 bg-gradient-to-r from-yellow-100 to-orange-100 rounded-xl">
-              <div className="text-2xl font-black text-gray-800 mb-2">🎉 CONGRATULATIONS! 🎉</div>
-              <div className="text-lg text-gray-700">You're playing for: <span className="font-bold text-purple-600">{bonusPrize}</span></div>
-            </div>
-          )}
-        </div>
-      )}
+     {bonusState === "prize_spin" && !showBonusSelector && (
+  <BonusPrizeShuffler
+    displayBonusPlayer={displayBonusPlayer}
+    bonusPrize={bonusPrize}
+    setBonusPrize={setBonusPrize}
+    bonusSpinnerSpinning={bonusSpinnerSpinning}
+    setBonusSpinnerSpinning={setBonusSpinnerSpinning}
+    sfx={sfx}
+    setBonusHideBoard={setBonusHideBoard}
+    setShowBonusLetterModal={setShowBonusLetterModal}
+    setBonusLetterType={setBonusLetterType}
+  />
+)}
+
       
    {/* Other bonus states */}
       {bonusState !== "prize_spin" && (
@@ -3978,78 +4151,79 @@ if (phase === "setup") {
 
     return (
       // MODIFIED: Added overflow-y-auto and changed justify-center to justify-start on mobile
-      <div className={cls("min-h-screen h-screen text-white flex flex-col items-center justify-start lg:justify-center overflow-y-auto p-4 sm:p-6", GRADIENT)}>
-        <PersistentHeader
-          sfx={sfx}
-          phase={phase}
-          backToSetup={backToSetup}
-          toggleFullscreen={toggleFullscreen}
-          awaitingConsonant={awaitingConsonant}
-          zoomed={zoomed}
-          landed={landed}
-          spinning={spinning}
-          showSolveModal={showSolveModal}
-          showWinScreen={showWinScreen}
-          bonusReadyModalVisible={bonusReadyModalVisible}
-          bonusResult={bonusResult}
-          showStats={showStats}
-          showBonusLetterModal={showBonusLetterModal}
-          showBonusSelector={showBonusSelector}
-          bonusActive={bonusActive}
-          bonusRevealing={bonusRevealing}
-          bonusAwaitingReady={bonusAwaitingReady}
-          isFullscreen={isFullscreen}
-          showBonusSolveModal={showBonusSolveModal}
-          bonusSpinning={bonusSpinning}
-          showMysterySpinner={showMysterySpinner}
-        />
-        <div className="max-w-7xl w-full mx-auto mt-16 lg:mt-0">
-          <h1 className="text-4xl md:text-6xl font-extrabold tracking-tight mb-6 text-center text-white [text-shadow:0_6px_18px_rgba(0,0,0,0.45)]"
-            style={{ fontFamily: "'Poppins', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial" }}
-          >
-            <span className="inline-block mr-2">🛞</span>
-            <span className="bg-clip-text text-transparent bg-gradient-to-r from-yellow-300 via-yellow-400 to-white">Wheel of Jon-Tune</span>
-          </h1>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            {/* --- Game Setup Card --- */}
-            <div className="rounded-2xl p-6 md:p-8 backdrop-blur-md bg-white/10 border border-white/10 shadow-lg">
-              <h2 className="text-3xl font-bold text-center text-white mb-8">Game Setup</h2>
-              <div className="space-y-6">
-                
-                {/* MODIFIED: Number of Teams - Stacks on mobile */}
-                <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2 sm:gap-4">
-                  <label className="text-lg sm:text-xl uppercase tracking-wider font-bold text-white/90 text-left sm:text-center" htmlFor="team-count-input">Number of Teams</label>
-                  <input
-                    id="team-count-input"
-                    type="text"
-                    inputMode="numeric"
-                    pattern="[0-9]*"
-                    maxLength={3}
-                    value={tempTeamCount}
-                    onChange={(e) => setTempTeamCount(e.target.value.replace(/\D/g, ""))}
-                    onBlur={() => applyTempTeamCount()}
-                    className="w-full sm:w-20 px-4 py-3 rounded-lg bg-black/30 text-white text-center font-bold text-xl border border-white/30 focus:outline-none focus:ring-2 focus:ring-yellow-400 transition"
-                  />
-                </div>
+      <div className={cls("min-h-screen h-screen text-white flex flex-col items-center justify-start lg:justify-center overflow-y-auto p-4 sm:p-6", GRADIENT)}>
+        <PersistentHeader
+          sfx={sfx}
+          phase={phase}
+          backToSetup={backToSetup}
+          toggleFullscreen={toggleFullscreen}
+          awaitingConsonant={awaitingConsonant}
+          zoomed={zoomed}
+          landed={landed}
+          spinning={spinning}
+          showSolveModal={showSolveModal}
+          showWinScreen={showWinScreen}
+          bonusReadyModalVisible={bonusReadyModalVisible}
+          bonusResult={bonusResult}
+          showStats={showStats}
+          showBonusLetterModal={showBonusLetterModal}
+          showBonusSelector={showBonusSelector}
+          bonusActive={bonusActive}
+          bonusRevealing={bonusRevealing}
+          bonusAwaitingReady={bonusAwaitingReady}
+          isFullscreen={isFullscreen}
+          showBonusSolveModal={showBonusSolveModal}
+          bonusSpinning={bonusSpinning}
+          showMysterySpinner={showMysterySpinner}
+        />
+        <div className="max-w-7xl w-full mx-auto mt-16 lg:mt-0">
+          <h1 className="text-4xl md:text-6xl font-extrabold tracking-tight mb-6 text-center text-white [text-shadow:0_6px_18px_rgba(0,0,0,0.45)]"
+            style={{ fontFamily: "'Poppins', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial" }}
+          >
+            <span className="inline-block mr-2">🛞</span>
+            <span className="bg-clip-text text-transparent bg-gradient-to-r from-yellow-300 via-yellow-400 to-white">Wheel of Jon-Tune</span>
+          </h1>
+     {/* MODIFIED: Stacks on mobile and adds padding-bottom to avoid keyboard overlap */}
+<div className="grid grid-cols-1 lg:grid-cols-2 gap-8 pb-28 lg:pb-0">
+            {/* --- Game Setup Card --- */}
+            <div className="rounded-2xl p-6 md:p-8 backdrop-blur-md bg-white/10 border border-white/10 shadow-lg">
+              <h2 className="text-3xl font-bold text-center text-white mb-8">Game Setup</h2>
+              <div className="space-y-6">
+                
+                {/* MODIFIED: Number of Teams - Stacks on mobile */}
+                <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2 sm:gap-4">
+                  <label className="text-lg sm:text-xl uppercase tracking-wider font-bold text-white/90 text-left sm:text-center" htmlFor="team-count-input">Number of Teams</label>
+                  <input
+                    id="team-count-input"
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    maxLength={3}
+                    value={tempTeamCount}
+                    onChange={(e) => setTempTeamCount(e.target.value.replace(/\D/g, ""))}
+                    onBlur={() => applyTempTeamCount()}
+                    className="w-full sm:w-20 px-4 py-3 rounded-lg bg-black/30 text-white text-center font-bold text-xl border border-white/30 focus:outline-none focus:ring-2 focus:ring-yellow-400 transition"
+                  />
+                </div>
 
-                {/* MODIFIED: Number of Rounds - Stacks on mobile */}
-                <div>
-                  <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2 sm:gap-4 mb-2">
-                    <label className="text-lg sm:text-xl uppercase tracking-wider font-bold text-white/90 text-left sm:text-center" htmlFor="rounds-count-input">Number of Main Rounds</label>
-                    <input
-                      id="rounds-count-input"
-                      type="text"
-                      inputMode="numeric"
-                      pattern="[0-9]*"
-                      maxLength={3}
-                      value={tempRoundsCount}
-                      onChange={(e) => setTempRoundsCount(e.target.value.replace(/\D/g, ""))}
-                      onBlur={() => applyTempRoundsCount()}
-                      className="w-full sm:w-20 px-4 py-3 rounded-lg bg-black/30 text-white text-center font-bold text-xl border border-white/30 focus:outline-none focus:ring-2 focus:ring-yellow-400 transition"
-                    />
-                  </div>
-                  <p className="text-sm sm:text-lg text-white/70 italic text-left sm:text-right">Bonus round is a single extra round.</p>
-                </div>
+                {/* MODIFIED: Number of Rounds - Stacks on mobile */}
+                <div>
+                  <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2 sm:gap-4 mb-2">
+                    <label className="text-lg sm:text-xl uppercase tracking-wider font-bold text-white/90 text-left sm:text-center" htmlFor="rounds-count-input">Number of Main Rounds</label>
+                    <input
+                      id="rounds-count-input"
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      maxLength={3}
+                      value={tempRoundsCount}
+                      onChange={(e) => setTempRoundsCount(e.target.value.replace(/\D/g, ""))}
+                      onBlur={() => applyTempRoundsCount()}
+                      className="w-full sm:w-20 px-4 py-3 rounded-lg bg-black/30 text-white text-center font-bold text-xl border border-white/30 focus:outline-none focus:ring-2 focus:ring-yellow-400 transition"
+                    />
+                  </div>
+                  <p className="text-sm sm:text-lg text-white/70 italic text-left sm:text-right">Bonus round is a single extra round.</p>
+                </div>
                 
                 {/* Team Names */}
                 <div>
@@ -4122,206 +4296,195 @@ if (phase === "setup") {
     );
   }
   
-
-
-
-
-
-
-
-
-
-
    
   // Main play UI
   const baseBgColor = isCharging ? "#16a34a" : "#22c55e";
   const fillBgColor = "rgba(4,120,87,0.95)";
 
   
- return (
-  <div
-   className={cls(
-     "min-h-screen h-screen text-white flex flex-col items-center p-2 sm:p-4",
-     zoomed ? "overflow-hidden" : "overflow-auto",
-     GRADIENT
-   )}
-  >
-  <PersistentHeader
-    sfx={sfx}
-    phase={phase}
-    backToSetup={backToSetup}
-    toggleFullscreen={toggleFullscreen}
-    awaitingConsonant={awaitingConsonant}
-    zoomed={zoomed}
-    landed={landed}
-    spinning={spinning}
-    showSolveModal={showSolveModal}
-    showWinScreen={showWinScreen}
-    bonusReadyModalVisible={bonusReadyModalVisible}
-    bonusResult={bonusResult}
-    showStats={showStats}
-    showBonusLetterModal={showBonusLetterModal}
-    showBonusSelector={showBonusSelector}
-    bonusActive={bonusActive}
-    bonusRevealing={bonusRevealing}
-    bonusAwaitingReady={bonusAwaitingReady}
-    isFullscreen={isFullscreen}
-    showBonusSolveModal={showBonusSolveModal}
-    bonusSpinning={bonusSpinning}
-    showMysterySpinner={showMysterySpinner}
-  />
-
-    {/* central content */}
+// Main play UI
+  return (
     <div
       className={cls(
-        "w-full h-full flex flex-col",
-        (zoomed || showWinScreen) && "invisible",
-        (isRevealingLetters || finishingRef.current) && "pointer-events-none select-none"
+        "min-h-screen h-screen text-white flex flex-col items-center p-2 sm:p-4",
+        zoomed ? "overflow-hidden" : "overflow-y-auto",
+        GRADIENT
       )}
     >
-      {/* KEY CHANGE: Default is 'flex-col' (mobile), but 'lg:flex-row' switches it to your desktop layout on large screens. */}
-      <main className="w-full max-w-7xl mx-auto flex-1 flex flex-col lg:flex-row items-center lg:items-center gap-4 min-h-0">
-        
-        {/* KEY CHANGE: Default is 'w-full' (mobile), 'lg:w-1/2' makes it half-width on large screens for the desktop layout. */}
-        <div className="flex flex-col items-center justify-center gap-2 w-full lg:w-1/2 h-auto lg:h-full py-2">
-          <div className="relative flex items-center justify-center">
-            <canvas ref={canvasRef} style={{ width: `${wheelPx}px`, height: `${wheelPx}px`, display: "block" }} />
-            <div
-              className="absolute left-1/2 top-1/2 transform -translate-x-1/2 -translate-y-1/2 rounded-full bg-no-repeat pointer-events-none"
-              style={{ width: "20%", height: "20%", backgroundImage: "url(images/hub-image.png)", backgroundSize: "110%", backgroundPosition: "10% -30px" }}
-              aria-hidden="true"
-            />
+      <PersistentHeader
+        sfx={sfx}
+        phase={phase}
+        backToSetup={backToSetup}
+        toggleFullscreen={toggleFullscreen}
+        awaitingConsonant={awaitingConsonant}
+        zoomed={zoomed}
+        landed={landed}
+        spinning={spinning}
+        showSolveModal={showSolveModal}
+        showWinScreen={showWinScreen}
+        bonusReadyModalVisible={bonusReadyModalVisible}
+        bonusResult={bonusResult}
+        showStats={showStats}
+        showBonusLetterModal={showBonusLetterModal}
+        showBonusSelector={showBonusSelector}
+        bonusActive={bonusActive}
+        bonusRevealing={bonusRevealing}
+        bonusAwaitingReady={bonusAwaitingReady}
+        isFullscreen={isFullscreen}
+        showBonusSolveModal={showBonusSolveModal}
+        bonusSpinning={bonusSpinning}
+        showMysterySpinner={showMysterySpinner}
+      />
+
+      <div
+        className={cls(
+          "w-full h-full flex flex-col",
+          (zoomed || showWinScreen) && "invisible",
+          (isRevealingLetters || finishingRef.current) && "pointer-events-none select-none"
+        )}
+      >
+        {/* ======================================================================= */}
+        {/* ====== MOBILE-ONLY LAYOUT (Visible below 1024px) ======================= */}
+        {/* ======================================================================= */}
+        <main className="w-full h-full flex flex-col justify-between max-w-lg mx-auto lg:hidden">
+          {/* Top Section: Wheel and Action Buttons */}
+          <div className="flex flex-col items-center gap-2 pt-12">
+            <div className="relative flex items-center justify-center">
+              {/* Use the new mobileCanvasRef here */}
+              <canvas ref={mobileCanvasRef} style={{ width: `${wheelPx}px`, height: `${wheelPx}px`, display: "block" }} />
+              <div
+                className="absolute left-1/2 top-1/2 transform -translate-x-1/2 -translate-y-1/2 rounded-full bg-no-repeat pointer-events-none"
+                style={{ width: "20%", height: "20%", backgroundImage: "url(images/hub-image.png)", backgroundSize: "110%", backgroundPosition: "10% -30px" }}
+                aria-hidden="true"
+              />
+            </div>
+            <div className="flex justify-center flex-wrap gap-2 sm:gap-4 items-center mt-2">
+              {/* Use the new mobileSpinButtonRef here */}
+              <button ref={mobileSpinButtonRef} onMouseDown={startCharge} onMouseUp={endCharge} onMouseLeave={endCharge} disabled={!canSpin} style={canSpin ? { backgroundImage: `linear-gradient(to right, rgba(4,120,87,0.95) ${spinPower}%, #22c55e ${spinPower}%)`, transition: snapChargeToZero ? "none" : "background-image 80ms linear" } : {}} className={cls("rounded-xl font-bold text-base sm:text-xl px-4 py-2 sm:px-6 sm:py-3 transition-colors custom-hover", !canSpin ? "bg-gray-700/60 text-gray-400 cursor-not-allowed" : "text-white hover:brightness-110")}>
+                SPIN
+              </button>
+              <button onClick={() => setShowVowelModal(true)} disabled={!canBuyVowel} className={cls("px-3 py-2 rounded-xl font-bold text-xs sm:text-base custom-hover", !canBuyVowel ? "bg-gray-700/60 text-gray-400 cursor-not-allowed" : "bg-blue-500 text-white hover:bg-blue-600")}>
+                BUY VOWEL (${VOWEL_COST})
+              </button>
+              <button onClick={() => setShowSolveModal(true)} disabled={!canSolve} className={cls("px-3 py-2 rounded-xl font-bold text-xs sm:text-base custom-hover", !canSolve ? "bg-gray-700/60 text-gray-400 cursor-not-allowed" : "bg-purple-500 text-white hover:bg-purple-600")}>
+                SOLVE
+              </button>
+            </div>
           </div>
 
-          <div className="flex justify-center flex-wrap gap-2 sm:gap-4 items-center mt-2">
-            <button ref={spinButtonRef} onMouseDown={startCharge} onMouseUp={endCharge} onMouseLeave={endCharge} disabled={!canSpin} style={canSpin ? { backgroundImage: `linear-gradient(to right, rgba(4,120,87,0.95) ${spinPower}%, #22c55e ${spinPower}%)`, transition: snapChargeToZero ? "none" : "background-image 80ms linear" } : {}} className={cls("rounded-xl font-bold text-base sm:text-xl px-4 py-2 sm:px-8 sm:py-4 transition-colors custom-hover", !canSpin ? "bg-gray-700/60 text-gray-400 cursor-not-allowed" : "text-white hover:brightness-110")}>
-              SPIN
-            </button>
-            <button
-              onClick={() => setShowVowelModal(true)}
-              disabled={!canBuyVowel}
-              className={cls(
-                "px-4 py-2 rounded-xl font-bold text-sm sm:text-lg custom-hover",
-                !canBuyVowel ? "bg-gray-700/60 text-gray-400 cursor-not-allowed" : "bg-blue-500 text-white hover:bg-blue-600"
-              )}
-            >
-              BUY VOWEL (${VOWEL_COST})
-            </button>
-            <button
-              onClick={() => setShowSolveModal(true)}
-              disabled={!canSolve}
-              className={cls(
-                "px-4 py-2 rounded-xl font-bold text-sm sm:text-lg custom-hover",
-                !canSolve ? "bg-gray-700/60 text-gray-400 cursor-not-allowed" : "bg-purple-500 text-white hover:bg-purple-600"
-              )}
-            >
-              SOLVE
-            </button>
-          </div>
-        </div>
-
-        {/* KEY CHANGE: Default is 'w-full' (mobile), 'lg:w-1/2' makes it half-width on large screens. */}
-        <div className="flex flex-col gap-4 w-full lg:w-1/2 h-full justify-center">
-          <h2 className="text-xl sm:text-2xl font-bold tracking-widest uppercase text-center">{category}</h2>
-          <div className="flex flex-wrap justify-center gap-1 sm:gap-2 p-2 sm:p-4 rounded-xl backdrop-blur-md bg-white/10 w-full">
-            {wordTokens.map((tok, i) => {
-              if (tok.type === "space") return <div key={i} className="w-2 sm:w-4 h-10 sm:h-14 flex-shrink-0 fullscreen:w-6" />;
-              return (
-                <div key={i} className="flex gap-1 sm:gap-2">
-                  {tok.cells.map((cell, j) => {
-                    const isSpecial = !isLetter(cell.ch);
-                    return (
-                      <div
-                        key={`${i}-${j}`}
-                        className={cls(
-                          "w-7 h-10 sm:w-10 sm:h-16 text-xl sm:text-3xl font-bold flex items-center justify-center rounded-md",
-                          cell.shown ? "bg-yellow-300 text-black shadow-lg" : "bg-blue-950/80 text-white",
-                          isSpecial && "bg-transparent text-white"
-                        )}
-                      >
-                        {isSpecial ? cell.ch : cell.shown ? cell.ch : ""}
-                      </div>
-                    );
-                  })}
-                </div>
-              );
-            })}
-          </div>
-
-          <div className="w-full max-w-2xl mx-auto p-2">
-            <div className="flex flex-wrap justify-center gap-1 sm:gap-2">
-              {LETTERS.map((L) => {
-                const disabled = isRevealingLetters || letters.has(L) || VOWELS.has(L) || !awaitingConsonant;
-                const sizeClasses = "w-7 h-7 sm:w-9 sm:h-9 text-base sm:text-lg";
-                
+          {/* Middle Section: Puzzle and Unified Keyboard */}
+          <div className="w-full">
+            <h2 className="text-xl sm:text-2xl font-bold tracking-widest uppercase text-center mb-2">{category}</h2>
+            <div className="flex flex-wrap justify-center gap-1 sm:gap-2 p-2 rounded-xl backdrop-blur-md bg-white/10 w-full mb-4">
+              {wordTokens.map((tok, i) => {
+                if (tok.type === "space") return <div key={i} className="w-2 sm:w-4 h-8 sm:h-12 flex-shrink-0" />;
                 return (
-                  <button
-                    key={L}
-                    onClick={() => guessLetter(L)}
-                    disabled={disabled}
-                    aria-label={`Guess ${L}`}
-                    className={cls(
-                      "rounded-md font-extrabold flex items-center justify-center",
-                      sizeClasses,
-                      disabled ? "bg-gray-700/50 text-gray-400 cursor-not-allowed" : "bg-white/10 hover:bg-white/20"
-                    )}
-                  >
-                    {L}
-                  </button>
+                  <div key={i} className="flex gap-1 sm:gap-1.5">
+                    {tok.cells.map((cell, j) => {
+                      const isSpecial = !isLetter(cell.ch);
+                      return <div key={`${i}-${j}`} className={cls("w-6 h-8 sm:w-8 sm:h-12 text-lg sm:text-2xl font-bold flex items-center justify-center rounded", cell.shown ? "bg-yellow-300 text-black shadow-lg" : "bg-blue-950/80 text-white", isSpecial && "bg-transparent text-white")}>{isSpecial ? cell.ch : cell.shown ? cell.ch : ""}</div>;
+                    })}
+                  </div>
                 );
               })}
             </div>
-            <div className="text-center mt-2 text-sm opacity-75">{awaitingConsonant ? "Pick a consonant" : "Spin, buy a vowel, or solve"}</div>
-          </div>
-
-          {/* KEY CHANGE: Team cards switch from 2 to 3 columns on larger screens to fit the desktop layout. */}
-          <div className="w-full">
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3 gap-2 sm:gap-4 w-full">
-              {teams.map((t, i) => (
-                <TeamCard key={i} t={t} i={i} />
-              ))}
+            <div className="w-full max-w-md mx-auto">
+              <div className="grid grid-cols-9 gap-1.5 justify-center">
+                {LETTERS.map((L) => {
+                  const disabled = isRevealingLetters || letters.has(L) || VOWELS.has(L) || !awaitingConsonant;
+                  return <button key={L} onClick={() => guessLetter(L)} disabled={disabled} aria-label={`Guess ${L}`} className={cls("w-8 h-8 sm:w-9 sm:h-9 rounded font-extrabold flex items-center justify-center text-sm transition-transform duration-150", disabled ? "bg-gray-700/50 text-gray-400 cursor-not-allowed" : "bg-white/10 hover:bg-white/20 active:scale-[0.98]")}>{L}</button>;
+                })}
+              </div>
+              <div className="text-center mt-2 text-sm opacity-75">{awaitingConsonant ? "Pick a consonant" : "Spin, buy a vowel, or solve"}</div>
             </div>
           </div>
-        </div>
-      </main>
-    </div>
 
-    {/* (The rest of your modals and overlays remain unchanged) */}
-    {/* ... (keep the rest of the return statement from the previous answer) ... */}
-    <div className={cls("fixed inset-0 z-50 flex items-center justify-center", !zoomed && "hidden pointer-events-none")}>
+          {/* Bottom Section: Compact Team Cards */}
+          <div className="w-full pb-2">
+            <div className="grid grid-cols-3 gap-2 w-full">{teams.map((t, i) => <TeamCard key={i} t={t} i={i} />)}</div>
+          </div>
+        </main>
+        
+        {/* ======================================================================= */}
+        {/* ====== DESKTOP-ONLY LAYOUT (Visible above 1024px) ===================== */}
+        {/* ======================================================================= */}
+        <main className="w-full max-w-7xl mx-auto flex-1 hidden lg:flex flex-col lg:flex-row items-center lg:items-center gap-4 min-h-0">
+          {/* Left Column: Wheel and Buttons */}
+          <div className="flex flex-col items-center justify-center gap-2 w-full lg:w-1/2 h-auto lg:h-full py-2">
+            <div className="relative flex items-center justify-center">
+              {/* Use the original canvasRef here */}
+              <canvas ref={canvasRef} style={{ width: `${wheelPx}px`, height: `${wheelPx}px`, display: "block" }} />
+              <div
+                className="absolute left-1/2 top-1/2 transform -translate-x-1/2 -translate-y-1/2 rounded-full bg-no-repeat pointer-events-none"
+                style={{ width: "20%", height: "20%", backgroundImage: "url(images/hub-image.png)", backgroundSize: "110%", backgroundPosition: "10% -30px" }}
+                aria-hidden="true"
+              />
+            </div>
+            <div className="flex justify-center flex-wrap gap-2 sm:gap-4 items-center mt-2">
+              {/* Use the original spinButtonRef here */}
+              <button ref={spinButtonRef} onMouseDown={startCharge} onMouseUp={endCharge} onMouseLeave={endCharge} disabled={!canSpin} style={canSpin ? { backgroundImage: `linear-gradient(to right, rgba(4,120,87,0.95) ${spinPower}%, #22c55e ${spinPower}%)`, transition: snapChargeToZero ? "none" : "background-image 80ms linear" } : {}} className={cls("rounded-xl font-bold text-base sm:text-xl px-4 py-2 sm:px-8 sm:py-4 transition-colors custom-hover", !canSpin ? "bg-gray-700/60 text-gray-400 cursor-not-allowed" : "text-white hover:brightness-110")}>
+                SPIN
+              </button>
+              <button onClick={() => setShowVowelModal(true)} disabled={!canBuyVowel} className={cls("px-4 py-2 rounded-xl font-bold text-sm sm:text-lg custom-hover", !canBuyVowel ? "bg-gray-700/60 text-gray-400 cursor-not-allowed" : "bg-blue-500 text-white hover:bg-blue-600")}>
+                BUY VOWEL (${VOWEL_COST})
+              </button>
+              <button onClick={() => setShowSolveModal(true)} disabled={!canSolve} className={cls("px-4 py-2 rounded-xl font-bold text-sm sm:text-lg custom-hover", !canSolve ? "bg-gray-700/60 text-gray-400 cursor-not-allowed" : "bg-purple-500 text-white hover:bg-purple-600")}>
+                SOLVE
+              </button>
+            </div>
+          </div>
+          
+          {/* Right Column: Puzzle, Keyboard, Teams */}
+          <div className="flex flex-col gap-4 w-full lg:w-1/2 h-full justify-center">
+            <h2 className="text-xl sm:text-2xl font-bold tracking-widest uppercase text-center">{category}</h2>
+            <div className="flex flex-wrap justify-center gap-1 sm:gap-2 p-2 sm:p-4 rounded-xl backdrop-blur-md bg-white/10 w-full">
+              {wordTokens.map((tok, i) => {
+                if (tok.type === "space") return <div key={i} className="w-2 sm:w-4 h-10 sm:h-14 flex-shrink-0 fullscreen:w-6" />;
+                return (
+                  <div key={i} className="flex gap-1 sm:gap-2">
+                    {tok.cells.map((cell, j) => {
+                      const isSpecial = !isLetter(cell.ch);
+                      return <div key={`${i}-${j}`} className={cls("w-7 h-10 sm:w-10 sm:h-16 text-xl sm:text-3xl font-bold flex items-center justify-center rounded-md", cell.shown ? "bg-yellow-300 text-black shadow-lg" : "bg-blue-950/80 text-white", isSpecial && "bg-transparent text-white")}>{isSpecial ? cell.ch : cell.shown ? cell.ch : ""}</div>;
+                    })}
+                  </div>
+                );
+              })}
+            </div>
+            <div className="w-full max-w-2xl mx-auto p-2">
+              <div className="flex flex-wrap justify-center gap-2 md:gap-3">
+                {LETTERS.map((L) => {
+                  const disabled = isRevealingLetters || letters.has(L) || VOWELS.has(L) || !awaitingConsonant;
+                  return <button key={L} onClick={() => guessLetter(L)} disabled={disabled} aria-label={`Guess ${L}`} className={cls("w-11 h-11 lg:w-12 lg:h-12 rounded-md font-extrabold flex items-center justify-center text-lg transition-transform duration-150", disabled ? "bg-gray-700/50 text-gray-400 cursor-not-allowed" : "bg-white/10 hover:bg-white/20 active:scale-[0.98]")}>{L}</button>;
+                })}
+              </div>
+              <div className="text-center mt-2 text-base opacity-75">{awaitingConsonant ? "Pick a consonant" : "Spin, buy a vowel, or solve"}</div>
+            </div>
+            <div className="w-full">
+              <div className="grid grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-2 sm:gap-4 w-full">{teams.map((t, i) => <TeamCard key={i} t={t} i={i} />)}</div>
+            </div>
+          </div>
+        </main>
+      </div>
+
+      {/* --- Modals and Overlays (Unchanged) --- */}
+      <div className={cls("fixed inset-0 z-50 flex items-center justify-center", !zoomed && "hidden pointer-events-none")}>
         <div className="absolute inset-0 bg-black/70" />
         <div className="relative flex items-center justify-center z-10">
           <canvas ref={zoomCanvasRef} style={{ width: `${wheelPx}px`, height: `${wheelPx}px`, display: "block" }} />
-          <div
-            className="absolute left-1/2 top-1/2 transform -translate-x-1/2 -translate-y-1/2 rounded-full bg-no-repeat pointer-events-none"
-            style={{ width: "20%", height: "20%", backgroundImage: "url(images/hub-image.png)", backgroundSize: "110%", backgroundPosition: "10% -50px" }}
-            aria-hidden="true"
-          />
+          <div className="absolute left-1/2 top-1/2 transform -translate-x-1/2 -translate-y-1/2 rounded-full bg-no-repeat pointer-events-none" style={{ width: "20%", height: "20%", backgroundImage: "url(images/hub-image.png)", backgroundSize: "110%", backgroundPosition: "10% -30px" }} aria-hidden="true" />
         </div>
-
-        {landed && (
-          <div className="absolute inset-0 flex items-center justify-center p-8 text-6xl sm:text-8xl lg:text-9xl font-black uppercase text-white [text-shadow:0_4px_8px_rgba(0,0,0,0.8)] pointer-events-none z-20 text-center">
-            {landed?.t === "cash" && `$${landed.v.toLocaleString()}`}
-            {landed?.t === "bankrupt" && "BANKRUPT"}
-            {landed?.t === "lose" && "LOSE A TURN"}
-            {landed?.prize?.type === "tshirt" && "T-SHIRT PRIZE!"}
-            {landed?.t !== "cash" && landed?.t !== "bankrupt" && landed?.t !== "lose" && !landed?.prize && landed.label}
-          </div>
-        )}
-      </div>
-
-      {(isRevealingLetters || finishingRef.current) && (
-        <div
-        ref={blockingOverlayRef}
-          className="fixed inset-0 z-[90] bg-transparent"
-          aria-hidden="true"
-          onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
-          onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
-          onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
-          style={{ pointerEvents: "auto" }}
-        />
+{/* THIS IS THE CORRECTED BLOCK */}
+      {landed && (
+        <div className="absolute inset-0 flex items-center justify-center p-8 text-6xl sm:text-8xl lg:text-9xl font-black uppercase text-white [text-shadow:0_4px_8px_rgba(0,0,0,0.8)] pointer-events-none z-20 text-center">
+          {landed?.t === "cash" && `$${landed.v.toLocaleString()}`}
+          {landed?.t === "bankrupt" && "BANKRUPT"}
+          {landed?.t === "lose" && "LOSE A TURN"}
+          {landed?.prize?.type === "tshirt" && "T-SHIRT PRIZE!"}
+          {landed?.t !== "cash" && landed?.t !== "bankrupt" && landed?.t !== "lose" && !landed?.prize && landed.label}
+        </div>
       )}
-
+      </div>
+      {(isRevealingLetters || finishingRef.current) && <div ref={blockingOverlayRef} className="fixed inset-0 z-[90] bg-transparent" aria-hidden="true" onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); }} onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); }} onClick={(e) => { e.preventDefault(); e.stopPropagation(); }} style={{ pointerEvents: "auto" }} />}
       {showVowelModal && <VowelModal />}
       {showSolveModal && <SolveModal />}
       {showMysterySpinner && <MysterySpinnerModal />}
@@ -4331,19 +4494,15 @@ if (phase === "setup") {
       {bonusResult && <BonusResultModal result={bonusResult} />}
       {showBonusSolveModal && <BonusSolveInline />}
       {showStats && <StatsModal />}
-
-     {showWinScreen && (
-      <WinScreen winner={winners[0] || roundWinner || "Winner"} onClose={() => {
-        try { sfx.stop("solve"); } catch {}
+      {showWinScreen && <WinScreen winner={winners[0] || roundWinner || "Winner"} onClose={() => {
+        try { sfx.stop("solve"); } catch { }
         setShowWinScreen(false);
         setRoundWinner(null);
         setIsRevealingLetters(false);
         finishingRef.current = false;
         nextPuzzle();
-      }} />
-    )}
-
-    <ConfettiCanvas trigger={showWinScreen || bonusResult === 'win'} />
-  </div>
- );
+      }} />}
+      <ConfettiCanvas trigger={showWinScreen || bonusResult === 'win'} />
+    </div>
+  );
 }
