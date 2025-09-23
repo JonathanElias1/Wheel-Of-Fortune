@@ -41,7 +41,7 @@
 { "category": "MOVIE", "answer": "JON GUMP" },
 { "category": "MOVIE", "answer": "THE DEVIL WEARS JON" },
 { "category": "INTERCOURSE RELATED", "answer": "MORNING GLORY HOLE" },
-{ "category": "BEFORE AND AFTER", "answer": "CHILD LABOR" },
+{ "category": "EMPLOYMENT", "answer": "CHILD LABOR" },
 { "category": "BAD STUFF", "answer": "THE HOLOCAUST" },
 { "category": "PHRASE", "answer": "THE ELEPHANT IN THE ROOM" },
 { "category": "PHRASE", "answer": "CHECKING THE TEMPERATURE" },
@@ -51,13 +51,14 @@
 { "category": "ON THE MAP", "answer": "AVONDALE ARIZONA" },
 { "category": "PHRASE", "answer": "PLATINUM WITH NO FEATURES" },
 { "category": "BOOK TITLE", "answer": "EMAILS FROM AN ASSHOLE" },
-{ "category": "BOOK TITLE", "answer": "THE GIVING TREE" }
+{ "category": "BOOK TITLE", "answer": "THE GIVING TREE" },
+{ "category": "ON THE MAP", "answer": "MINDEN CITY MICHIGAN" }
 
   ],
 
     "bonusPuzzles": [
-{ "category": "FINAL PHRASE", "answer": "MAY THE JON BE WITH YOU" },
-{ "category": "THING", "answer": "INFINITY JONLET" },
-    { "category": "FINAL PHRASE", "answer": "FORTUNE FAVORS THE JON" }
+{ "category": "MOVIE", "answer": "MAY THE JON BE WITH YOU" },
+{ "category": "MOVIE", "answer": "INFINITY JONLET" },
+    { "category": "PHRASE", "answer": "FORTUNE FAVORS THE JON" }
   ]
 }

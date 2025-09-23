@@ -44,7 +44,7 @@ const WEDGES = [
   { t: "cash", v: 200, c: "#C9237B" },
   { t: "cash", v: 150, c: "#8C4399" },
   { t: "cash", v: 100, c: "#D15C22" },
-  { t: "bankrupt", label: "BANKRUPT", c: "#222222" },
+  { t: "lose", label: "LOSE A TURN", c: "#B1A99E" },
   { t: "cash", v: 125, c: "#4F9F4F" },
 ];
 
@@ -3686,7 +3686,7 @@ const BonusResultModal = ({ result }) => {
         )}>
         {result === "win" ? (
           <>
-            <h2 className="text-5xl font-extrabold mb-4 text-green-700">Congratulations!</h2>
+            <h2 className="text-5xl font-extrabold mb-4 text-green-700">CONGRATS!</h2>
            <div className="mb-4">
   <p className="text-2xl text-black">You solved the bonus puzzle and won a</p>
   <div className="font-extrabold text-3xl mt-2">{bonusPrize}</div>
@@ -4484,7 +4484,7 @@ if (phase === "setup") {
         </div>
       )}
       </div>
-      {(isRevealingLetters || finishingRef.current) && <div ref={blockingOverlayRef} className="fixed inset-0 z-[90] bg-transparent" aria-hidden="true" onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); }} onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); }} onClick={(e) => { e.preventDefault(); e.stopPropagation(); }} style={{ pointerEvents: "auto" }} />}
+{(isRevealingLetters || finishingRef.current) && !showWinScreen && <div ref={blockingOverlayRef} className="fixed inset-0 z-[90] bg-transparent" aria-hidden="true" onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); }} onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); }} onClick={(e) => { e.preventDefault(); e.stopPropagation(); }} style={{ pointerEvents: "auto" }} />}
       {showVowelModal && <VowelModal />}
       {showSolveModal && <SolveModal />}
       {showMysterySpinner && <MysterySpinnerModal />}
