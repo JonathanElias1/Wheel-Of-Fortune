@@ -1,43 +1,46 @@
 // src/hooks/useImagePreloader.js
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 
-export default function useImagePreloader(imageList = []) {
-  const [loaded, setLoaded] = useState(false);
-  const [loadedCount, setLoadedCount] = useState(0);
-  const total = imageList.length;
-
+export default function useImagePreloader() {
+  const [imagesLoaded, setImagesLoaded] = useState(false);
+  
   useEffect(() => {
-    if (!imageList || imageList.length === 0) {
-      setLoaded(true);
-      setLoadedCount(0);
+    const imagePaths = [
+      '/images/hub-image.png',
+      '/images/winner-icon.png'
+    ];
+    
+    if (imagePaths.length === 0) {
+      setImagesLoaded(true);
       return;
     }
-
-    let cancelled = false;
-    let completed = 0;
-
-    imageList.forEach((src) => {
-      const img = new Image();
-      img.onload = () => {
-        if (cancelled) return;
-        completed += 1;
-        setLoadedCount(completed);
-        if (completed === total) setLoaded(true);
-      };
-      img.onerror = () => {
-        if (cancelled) return;
-        completed += 1;
-        setLoadedCount(completed);
-        if (completed === total) setLoaded(true);
-      };
-      // start loading
-      img.src = src;
-    });
-
-    return () => {
-      cancelled = true;
+    
+    let loadedCount = 0;
+    const totalImages = imagePaths.length;
+    
+    const onImageLoad = () => {
+      loadedCount++;
+      if (loadedCount === totalImages) {
+        setImagesLoaded(true);
+      }
     };
-  }, [imageList, total]);
+    
+    const onImageError = (path) => {
+      console.warn(`Failed to load image: ${path}`);
+      loadedCount++; // Still count as "loaded" to prevent hanging
+      if (loadedCount === totalImages) {
+        setImagesLoaded(true);
+      }
+    };
+    
+    imagePaths.forEach(path => {
+      const img = new Image();
+      img.onload = onImageLoad;
+      img.onerror = () => onImageError(path);
+      img.src = path;
+    });
+    
+  }, []);
 
-  return { loaded, loadedCount, total };
+  return imagesLoaded;
 }

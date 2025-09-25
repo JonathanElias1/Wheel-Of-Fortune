@@ -4194,22 +4194,16 @@ if (phase === "setup") {
                 <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2 sm:gap-4">
                   <label className="text-lg sm:text-xl uppercase tracking-wider font-bold text-white/90 text-left sm:text-center" htmlFor="team-count-input">Number of Teams</label>
                   <input
-                    id="team-count-input" 
-onFocus={(e) => e.target.select()}
-onKeyDown={(e) => {
-  if (e.key.match(/[0-9]/)) {
-    setTempTeamCount('');
-  }
-}}
-                    type="text"
-                    inputMode="numeric"
-                    pattern="[0-9]*"
-                    maxLength={3}
-                    value={tempTeamCount}
-                    onChange={(e) => setTempTeamCount(e.target.value.replace(/\D/g, ""))}
-                    onBlur={() => applyTempTeamCount()}
-                    className="w-full sm:w-20 px-4 py-3 rounded-lg bg-black/30 text-white text-center font-bold text-xl border border-white/30 focus:outline-none focus:ring-2 focus:ring-yellow-400 transition"
-                  />
+                    id="team-count-input"
+  onFocus={(e) => e.target.select()}
+  type="text"
+  inputMode="numeric"
+  pattern="[0-9]*"
+  maxLength={3}                      // allows up to 3 digits — change/remove if desired
+  value={tempTeamCount}
+  onChange={(e) => setTempTeamCount(e.target.value.replace(/\D/g, ""))}
+  onBlur={() => applyTempTeamCount()}
+  className="w-full sm:w-20 px-4 py-3 rounded-lg bg-black/30 text-white text-center font-bold text-xl border border-white/30 focus:outline-none focus:ring-2 focus:ring-yellow-400 transition"/>
                 </div>
 
                 {/* MODIFIED: Number of Rounds - Stacks on mobile */}
@@ -4218,21 +4212,16 @@ onKeyDown={(e) => {
                     <label className="text-lg sm:text-xl uppercase tracking-wider font-bold text-white/90 text-left sm:text-center" htmlFor="rounds-count-input">Number of Main Rounds</label>
                     <input
                       id="rounds-count-input"
-onFocus={(e) => e.target.select()}
-onKeyDown={(e) => {
-  if (e.key.match(/[0-9]/)) {
-    setTempRoundsCount('');
-  }
-}}
-                      type="text"
-                      inputMode="numeric"
-                      pattern="[0-9]*"
-                      maxLength={3}
-                      value={tempRoundsCount}
-                      onChange={(e) => setTempRoundsCount(e.target.value.replace(/\D/g, ""))}
-                      onBlur={() => applyTempRoundsCount()}
-                      className="w-full sm:w-20 px-4 py-3 rounded-lg bg-black/30 text-white text-center font-bold text-xl border border-white/30 focus:outline-none focus:ring-2 focus:ring-yellow-400 transition"
-                    />
+  onFocus={(e) => e.target.select()}
+  type="text"
+  inputMode="numeric"
+  pattern="[0-9]*"
+  maxLength={3}
+  value={tempRoundsCount}
+  onChange={(e) => setTempRoundsCount(e.target.value.replace(/\D/g, ""))}
+  onBlur={() => applyTempRoundsCount()}
+  className="w-full sm:w-20 px-4 py-3 rounded-lg bg-black/30 text-white text-center font-bold text-xl border border-white/30 focus:outline-none focus:ring-2 focus:ring-yellow-400 transition"
+/>
                   </div>
                   <p className="text-sm sm:text-lg text-white/70 italic text-left sm:text-right">Bonus round is a single extra round.</p>
                 </div>
