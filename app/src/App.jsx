@@ -999,7 +999,7 @@ const desktopSpinButtonRef = useRef(null);
   const [bonusLetters, setBonusLetters] = useState(new Set(["R", "S", "T", "L", "N", "E"]));
   const [bonusConsonants, setBonusConsonants] = useState([]);
   const [bonusVowel, setBonusVowel] = useState("");
-  const [bonusCountdown, setBonusCountdown] = useState(20);
+  const [bonusCountdown, setBonusCountdown] = useState(30);
   const [bonusAwaitingReady, setBonusAwaitingReady] = useState(false);
   const [bonusHideBoard, setBonusHideBoard] = useState(false);
   const [bonusPrepCountdown, setBonusPrepCountdown] = useState(5);
@@ -2872,7 +2872,7 @@ function selectBonusPrizeAndSnap(currentAngle, setBonusPrize, setBonusSpinnerAng
     setBonusHideBoard(true);
     setShowBonusSolveModal(false);
     setBonusActive(false);
-    setBonusCountdown(20);
+    setBonusCountdown(30);
     setBonusReadyModalVisible(true);
   }
 
@@ -3653,7 +3653,7 @@ return (
         <h1 className="text-4xl font-black mb-2">BONUS ROUND</h1>
         <p className="text-2xl font-semibold mb-6">Solve to win <span className="uppercase">{bonusPrize}!</span><br />Good luck <span className="font-black">{displayBonusPlayer}</span>!</p>
         <p className="text-xl md:text-2xl font-semibold text-gray-700 mb-6">R S T L N E are given</p>
-        <div className="text-xl md:text-2xl font-semibold text-gray-700 mb-6">Press <strong>READY</strong> when you're ready. The 20 second countdown will start immediately.</div>
+        <div className="text-xl md:text-2xl font-semibold text-gray-700 mb-6">Press <strong>READY</strong> when you're ready. The 30 second countdown will start immediately.</div>
         <div className="flex items-center justify-center gap-4">
           <button onClick={pressReadyStartBonus} disabled={readyDisabled || bonusActive} className={cls("px-10 py-4 rounded-xl text-2xl font-extrabold text-white", (readyDisabled || bonusActive) ? "bg-gray-400 cursor-not-allowed" : "bg-green-600 hover:bg-green-700")}>READY</button>
         </div>
@@ -3950,7 +3950,7 @@ if (phase === "bonus") {
           {bonusState === "letters" && bonusAwaitingReady && !bonusReadyModalVisible && (
             <div className="my-8 flex flex-col items-center gap-6">
               <div className="text-5xl font-black text-yellow-300">{bonusPrize}</div>
-              <p className="text-lg">Letters revealed. Press READY when you're ready to begin the 20s countdown.</p>
+              <p className="text-lg">Letters revealed. Press READY when you're ready to begin the 30s countdown.</p>
               <button onClick={() => { setBonusReadyModalVisible(true); }} disabled={readyDisabled || bonusActive} className={cls("px-16 py-6 text-3xl rounded-2xl bg-green-500 text-white font-extrabold shadow-lg transition-transform focus:outline-none", (readyDisabled || bonusActive) ? "opacity-60 cursor-not-allowed transform-none" : "hover:bg-green-600 hover:scale-105 animate-pulse")} aria-disabled={readyDisabled || bonusActive}>READY</button>
             </div>
           )}
@@ -4186,7 +4186,7 @@ if (phase === "setup") {
      {/* MODIFIED: Stacks on mobile and adds padding-bottom to avoid keyboard overlap */}
 <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 pb-28 lg:pb-0">
             {/* --- Game Setup Card --- */}
-            <div className="rounded-2xl p-6 md:p-8 backdrop-blur-md bg-white/10 border border-white/10 shadow-lg">
+  <div className="rounded-2xl p-6 md:p-8 backdrop-blur-md bg-white/10 border border-white/10 shadow-lg">
               <h2 className="text-3xl font-bold text-center text-white mb-8">Game Setup</h2>
               <div className="space-y-6">
                 
@@ -4194,7 +4194,13 @@ if (phase === "setup") {
                 <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2 sm:gap-4">
                   <label className="text-lg sm:text-xl uppercase tracking-wider font-bold text-white/90 text-left sm:text-center" htmlFor="team-count-input">Number of Teams</label>
                   <input
-                    id="team-count-input"
+                    id="team-count-input" 
+onFocus={(e) => e.target.select()}
+onKeyDown={(e) => {
+  if (e.key.match(/[0-9]/)) {
+    setTempTeamCount('');
+  }
+}}
                     type="text"
                     inputMode="numeric"
                     pattern="[0-9]*"
@@ -4212,6 +4218,12 @@ if (phase === "setup") {
                     <label className="text-lg sm:text-xl uppercase tracking-wider font-bold text-white/90 text-left sm:text-center" htmlFor="rounds-count-input">Number of Main Rounds</label>
                     <input
                       id="rounds-count-input"
+onFocus={(e) => e.target.select()}
+onKeyDown={(e) => {
+  if (e.key.match(/[0-9]/)) {
+    setTempRoundsCount('');
+  }
+}}
                       type="text"
                       inputMode="numeric"
                       pattern="[0-9]*"
@@ -4240,6 +4252,7 @@ if (phase === "setup") {
                         })}
                         className="w-full px-4 py-2 rounded-lg bg-black/20 text-white font-semibold border border-white/20 focus:outline-none focus:ring-2 focus:ring-yellow-400 transition"
                         placeholder={`Team ${i + 1}`}
+                        onFocus={(e) => e.target.select()}
                       />
                     ))}
                   </div>
