@@ -1,9 +1,7 @@
 //original code
 import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
-
 const GRADIENT = "bg-[radial-gradient(110%_110%_at_0%_0%,#5b7fff_0%,#21bd84_100%)]";
 const BASE_WHEEL_PX = 500;
-
 // --- bonus wheel orientation (used by draw + pick) ---
 const BONUS_START_DEG = -90; 
 const BONUS_CW = true;       
@@ -12,15 +10,11 @@ const SPIN_MAX_TURNS = 18;
 const SPIN_DURATION_MS = 5200;    
 const SPIN_SETTLE_MS = 700;       
 const POST_LAND_PAUSE_MS = 450;   
-
 const PRIZE_INDEX_CORRECTION = 0; 
-
 const VOWEL_COST = 200;
-
 const TEAM_NAME_MAX = 15;
 const MAX_TEAMS = 100;
 const SOLVE_BONUS = 300;
-
 const WEDGES = [
   { t: "cash", v: 400, c: "#00AADD" },
   { t: "wild", label: "MYSTERY", c: "#E6007E" },
@@ -47,15 +41,11 @@ const WEDGES = [
   { t: "lose", label: "LOSE A TURN", c: "#B1A99E" },
   { t: "cash", v: 125, c: "#4F9F4F" },
 ];
-
 const VOWELS = new Set(["A", "E", "I", "O", "U", "J"]);
 const LETTERS = "ABCDEFGHIKLMNOPQRSTUVWXYZ".split("");
 const ZOOM_WHEEL_PX = BASE_WHEEL_PX * 1.5;
 const BONUS_PRIZES = ["PIN", "STICKER", "T-SHIRT", "MAGNET", "KEYCHAIN"];
 const SOLVE_REVEAL_INTERVAL = 650;
-
-
-
 function useImagePreloader() {
   const [imagesLoaded, setImagesLoaded] = useState(false);
   
@@ -64,7 +54,6 @@ function useImagePreloader() {
     const imagePaths = [
       '/images/hub-image.png',
       '/images/winner-icon.png'
-
     ];
     
     if (imagePaths.length === 0) {
@@ -102,7 +91,6 @@ function useImagePreloader() {
   
   return imagesLoaded;
 }
-
 function useSfx() {
   const audioCtxRef = useRef(null);
   const bufferMapRef = useRef({});       // key -> AudioBuffer
@@ -113,11 +101,7 @@ function useSfx() {
   const [volume, setVolume] = useState(0.9);
   const [themeOn, setThemeOn] = useState(false);
   const [loaded, setLoaded] = useState(false); // true when initial decode settled
-
   
-
-
-
   // list of files to decode (key -> filename)
   const base = "/";
   const FILES = {
@@ -136,7 +120,6 @@ function useSfx() {
     chargeUp: "sounds/charge-up.mp3",
     startGame: "sounds/start-game.mp3",
   };
-
   // Create AudioContext + masterGain once
   useEffect(() => {
     try {
@@ -156,7 +139,6 @@ function useSfx() {
       audioCtxRef.current = null;
       masterGainRef.current = null;
     }
-
     return () => {
       // stop all nodes on unmount
       try {
@@ -177,14 +159,11 @@ function useSfx() {
       audioCtxRef.current = null;
       masterGainRef.current = null;
     };
-
   }, []);
-
   // decode all files in parallel (non-blocking)
   useEffect(() => {
     const ctx = audioCtxRef.current;
     if (!ctx) return;
-
     const entries = Object.entries(FILES);
     const decodes = entries.map(async ([key, filename]) => {
       try {
@@ -198,7 +177,6 @@ function useSfx() {
         console.warn(`Failed to load/decode ${filename} for key "${key}":`, e);
       }
     });
-
     Promise.allSettled(decodes).then(() => {
         loadedRef.current = true; 
       setLoaded(true);
@@ -208,14 +186,24 @@ function useSfx() {
     });
     // no cleanup needed here (buffers live until unmount)
   }, [/* run once */]);
-
   // update master gain when volume changes
   useEffect(() => {
     try {
       if (masterGainRef.current) masterGainRef.current.gain.value = volume;
     } catch (e) {}
   }, [volume]);
-
+    useEffect(() => {
+    const handleVisibilityChange = () => {
+      // When the page becomes visible again, try to unlock the audio
+      if (document.visibilityState === 'visible') {
+        unlock();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, []); // We can use an empty dependency array because unlock is stable
   // helper: ensure AudioContext is running (resume on user gesture if needed)
   const ensureCtxRunning = async () => {
     const ctx = audioCtxRef.current;
@@ -224,9 +212,8 @@ function useSfx() {
       try { await ctx.resume(); } catch (e) {}
     }
   };
-
   // Exposed helper to unlock from a user gesture — call from a click handler
-const unlock = async () => {
+const unlock = useCallback(async () => {
   const ctx = audioCtxRef.current;
   if (!ctx) return false;
   try {
@@ -238,15 +225,13 @@ const unlock = async () => {
     console.warn("AudioContext resume failed:", e);
     return false;
   }
-};
-
+}, []);
   // play a one-shot (gapless, buffer-based)
   const play = async (key) => {
     const ctx = audioCtxRef.current;
     const buf = bufferMapRef.current[key];
     if (!ctx || !buf) return;
     await ensureCtxRunning();
-
     try {
       const node = ctx.createBufferSource();
       node.buffer = buf;
@@ -266,7 +251,6 @@ const unlock = async () => {
       console.error("Failed to play buffer", key, e);
     }
   };
-
   // stop all currently playing one-shots for a key
   const stop = (key) => {
     try {
@@ -289,7 +273,6 @@ const unlock = async () => {
       delete loopNodesRef.current[key];
     }
   };
-
   // start a persistent gapless loop for a key
   // Implementation: create BufferSource -> gain node -> masterGain
   // we keep the node reference in loopNodesRef so we can stop it later.
@@ -298,10 +281,8 @@ const unlock = async () => {
     const buf = bufferMapRef.current[key];
     if (!ctx || !buf) return;
     await ensureCtxRunning();
-
     // if already looping for this key, leave it playing
     if (loopNodesRef.current[key] && loopNodesRef.current[key].playing) return;
-
     try {
       const node = ctx.createBufferSource();
       node.buffer = buf;
@@ -316,7 +297,6 @@ const unlock = async () => {
       console.error("Failed to start loop for", key, e);
     }
   };
-
   // stop persistent loop for a key
   const stopLoop = (key) => {
     const rec = loopNodesRef.current[key];
@@ -330,20 +310,17 @@ const unlock = async () => {
       delete loopNodesRef.current[key];
     }
   };
-
   // Theme/music toggle that plays intro then starts loop
   const toggleTheme = async () => {
     const introKey = "themeOpen";
     const loopKey = "themeLoop";
     if (!audioCtxRef.current) return;
-
     if (!themeOn) {
       const ctx = audioCtxRef.current;
       const introBuf = bufferMapRef.current[introKey];
       const loopBuf = bufferMapRef.current[loopKey];
       if (!introBuf && !loopBuf) return;
       await ensureCtxRunning();
-
       if (introBuf && loopBuf) {
         // play intro then start persistent loop
         try {
@@ -381,7 +358,6 @@ const unlock = async () => {
       setThemeOn(false);
     }
   };
-
   return {
     play,
     stop,
@@ -395,8 +371,6 @@ const unlock = async () => {
     unlock,
   };
 }
-
-
 const FALLBACK = [
   { category: "PLACE", answer: "JIMMYJONS" },
   { category: "PHRASE", answer: "HAPPY BIRTHDAY JON" },
@@ -411,7 +385,6 @@ const FALLBACK = [
   { category: "WORD", answer: "LYMPH" },
   { category: "MUSIC", answer: "THIS IS THE RHYTHM OF THE NIGHT" },
 ];
-
 async function loadPuzzles() {
   try {
     const res = await fetch("/wof.json", { cache: "no-store" });
@@ -425,7 +398,6 @@ async function loadPuzzles() {
     return { main: FALLBACK, bonus: FALLBACK };
   }
 }
-
 const cls = (...xs) => xs.filter(Boolean).join(" ");
 const isLetter = (ch) => /^[A-Z]$/.test(ch);
 function normalizeAnswer(raw) {
@@ -436,24 +408,18 @@ function nextIdx(i, len) {
   if (!len || len <= 0) return 0;
   return (i + 1) % len;
 }
-
 function WinScreen({ winner, onClose }) {
   const bouncerRef = useRef(null);
-
   useEffect(() => {
     const bouncer = bouncerRef.current;
     if (!bouncer) return;
-
     let animationFrameId = null;
     let impulseInterval = null;
-
     const rand = (min, max) => min + Math.random() * (max - min);
     const randSign = () => (Math.random() < 0.5 ? -1 : 1);
-
     const baseSize = 48 + Math.random() * 80;
     bouncer.style.width = `${baseSize}px`;
     bouncer.style.height = `${baseSize}px`;
-
     const pos = {
       x: Math.random() * Math.max(1, window.innerWidth - baseSize),
       y: Math.random() * Math.max(1, window.innerHeight - baseSize),
@@ -463,31 +429,26 @@ function WinScreen({ winner, onClose }) {
       rotSpeed: rand(-0.04, 0.04),
       scale: 0.95 + Math.random() * 0.4,
     };
-
     impulseInterval = setInterval(() => {
       const impulsePower = Math.random() < 0.18 ? rand(3, 9) : rand(0.8, 3);
       pos.vx += impulsePower * randSign();
       pos.vy += impulsePower * randSign();
       pos.rotSpeed += rand(-0.18, 0.18);
       pos.scale = 0.9 + Math.random() * 0.6;
-
       if (Math.random() < 0.06) {
         pos.x = Math.min(window.innerWidth - baseSize, Math.max(0, pos.x + rand(-120, 120)));
         pos.y = Math.min(window.innerHeight - baseSize, Math.max(0, pos.y + rand(-120, 120)));
       }
     }, 400 + Math.random() * 600);
-
     const animate = () => {
       const imageSize = { width: bouncer.offsetWidth, height: bouncer.offsetHeight };
       pos.x += pos.vx;
       pos.y += pos.vy;
       pos.rot += pos.rotSpeed;
-
       // small wander
       pos.x += rand(-0.4, 0.4);
       pos.y += rand(-0.4, 0.4);
       pos.rotSpeed *= 0.97;
-
       // bounds
       if (pos.x <= 0 || pos.x >= window.innerWidth - imageSize.width) {
         pos.vx *= -0.7;
@@ -499,35 +460,28 @@ function WinScreen({ winner, onClose }) {
         pos.y = Math.max(0, Math.min(window.innerHeight - imageSize.height, pos.y));
         pos.rotSpeed += rand(-0.12, 0.12);
       }
-
       const scale = 0.95 + Math.sin(performance.now() / 220 + pos.x) * 0.08 + (Math.random() * 0.03);
       const skewX = Math.sin(pos.rot * 2) * 2;
       const skewY = Math.cos(pos.rot * 1.5) * 1.2;
-
       bouncer.style.transform =
         `translate(${Math.round(pos.x)}px, ${Math.round(pos.y)}px) ` +
         `rotate(${pos.rot.toFixed(2)}rad) scale(${(pos.scale * scale).toFixed(2)}) ` +
         `skew(${skewX.toFixed(1)}deg, ${skewY.toFixed(1)}deg)`;
-
       animationFrameId = requestAnimationFrame(animate);
     };
-
     animationFrameId = requestAnimationFrame(animate);
-
     // 👇 NEW: tap/click anywhere to skip
     const handleTap = (e) => {
       e.preventDefault();
       onClose?.();
     };
     window.addEventListener("pointerdown", handleTap, { passive: false });
-
     return () => {
       if (animationFrameId) cancelAnimationFrame(animationFrameId);
       if (impulseInterval) clearInterval(impulseInterval);
       window.removeEventListener("pointerdown", handleTap);
     };
   }, [winner, onClose]);
-
   return (
    <div
   className={cls(
@@ -546,7 +500,6 @@ function WinScreen({ winner, onClose }) {
         alt="Bouncing icon"
         className="absolute top-0 left-0 rounded-lg shadow-lg pointer-events-none"
       />
-
       <div className="relative z-10 text-center">
         <h1
           className="text-5xl sm:text-6xl md:text-8xl font-black text-white animate-pulse [text-shadow:0_8px_16px_rgba(0,0,0,0.5)]"
@@ -567,8 +520,6 @@ function WinScreen({ winner, onClose }) {
     </div>
   );
 }
-
-
 function ConfettiCanvas({ trigger }) {
   const ref = useRef(null);
   const rafRef = useRef(null);
@@ -584,14 +535,12 @@ function ConfettiCanvas({ trigger }) {
     canvas.style.width = `${window.innerWidth}px`;
     canvas.style.height = `${window.innerHeight}px`;
     ctx.scale(DPR, DPR);
-
     // generate particles
     const colors = ["#FFD700", "#FF5E5E", "#5EE3FF", "#9B8CFF", "#6EE7B7"];
     const particles = [];
     
     // MODIFIED: Increased particle count
     const count = 200; 
-
     for (let i = 0; i < count; i++) {
       particles.push({
         x: window.innerWidth / 2 + (Math.random() - 0.5) * 200,
@@ -607,7 +556,6 @@ function ConfettiCanvas({ trigger }) {
         life: 240 + Math.floor(Math.random() * 100), 
       });
     }
-
     let t = 0;
     const loop = () => {
       t++;
@@ -625,36 +573,27 @@ function ConfettiCanvas({ trigger }) {
         ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size);
         ctx.restore();
       });
-
       if (particles.every((p) => p.life <= 0 || p.y > window.innerHeight + 50)) {
         // done
         return;
       }
       rafRef.current = requestAnimationFrame(loop);
     };
-
     rafRef.current = requestAnimationFrame(loop);
-
     return () => {
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
       // clear canvas
       ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
     };
   }, [trigger]);
-
   return <canvas ref={ref} className="fixed inset-0 pointer-events-none z-[70]" />;
 }
-
-
 // Paste this code ABOVE your App component
-
 const PersistentHeader = ({ sfx, phase, backToSetup, toggleFullscreen, awaitingConsonant, zoomed, landed, spinning, showSolveModal, showWinScreen, bonusReadyModalVisible, bonusResult, showStats, showBonusLetterModal, showBonusSelector, bonusActive, bonusRevealing, bonusAwaitingReady, isFullscreen, showBonusSolveModal, bonusSpinning, showMysterySpinner }) => {
   const isPostSpinConsonantOverlay = !!awaitingConsonant && !!zoomed && landed != null;
   const isBonusPrizeSpin = phase === "bonus" && !bonusActive && !bonusRevealing && !bonusAwaitingReady && !showBonusSelector;
   const shouldHideHeader = !!showSolveModal || !!spinning || isPostSpinConsonantOverlay || !!showWinScreen || !!bonusReadyModalVisible || !!bonusResult || !!showStats || !!showBonusLetterModal || !!showBonusSelector || isBonusPrizeSpin || !!showBonusSolveModal || !!bonusSpinning || !!showMysterySpinner || !!zoomed;
-
   if (shouldHideHeader) return null;
-
   return (
     <div className="fixed top-2 left-2 right-2 z-[100] flex items-center justify-between gap-2 pointer-events-auto">
       <div className="flex items-center gap-2">
@@ -691,7 +630,6 @@ const PersistentHeader = ({ sfx, phase, backToSetup, toggleFullscreen, awaitingC
     </div>
   );
 };
-
 const sanitizeLetters = (s) => (s || "").replace(/[^A-Za-z ]+/g, "");
 const allowLetterKey = (e) => {
   const k = e.key;
@@ -699,7 +637,6 @@ const allowLetterKey = (e) => {
     e.preventDefault();
   }
 };
-
 function BonusPrizeShuffler({
   displayBonusPlayer,
   bonusPrize,
@@ -720,9 +657,7 @@ function BonusPrizeShuffler({
   const pauseTimeoutRef = React.useRef(null);
   const mountedRef = React.useRef(true);
   const startRef = React.useRef(false); // <-- synchronous guard
-
   const PAUSE_AFTER_LAND_MS = 3000; // show final prize for 1s
-
   React.useEffect(() => {
     mountedRef.current = true;
     return () => {
@@ -746,7 +681,6 @@ function BonusPrizeShuffler({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
   const startShuffle = () => {
     // Synchronous re-entry guard: prevent double-clicks immediately
     if (startRef.current) {
@@ -758,11 +692,9 @@ function BonusPrizeShuffler({
       console.log("[Shuffler] startShuffle aborted (spinner running or prize already set)");
       return;
     }
-
     startRef.current = true;        // prevent re-entry synchronously
     setIsLocked(true);              // immediately disable button in UI
     console.log("[Shuffler] startShuffle -> starting spinning preview");
-
     // cleanup any previous timers (defensive)
     if (shuffleIntervalRef.current) {
       clearInterval(shuffleIntervalRef.current);
@@ -776,16 +708,13 @@ function BonusPrizeShuffler({
       clearTimeout(pauseTimeoutRef.current);
       pauseTimeoutRef.current = null;
     }
-
     setPreviewPrize(BONUS_PRIZES[Math.floor(Math.random() * BONUS_PRIZES.length)]);
     setBonusSpinnerSpinning(true);
     try { sfx?.play?.("spin"); } catch (e) {}
-
     // flicker the preview quickly while "shuffling"
     shuffleIntervalRef.current = setInterval(() => {
       setPreviewPrize(BONUS_PRIZES[Math.floor(Math.random() * BONUS_PRIZES.length)]);
     }, 70);
-
     // after short duration choose final prize
     finishTimeoutRef.current = setTimeout(() => {
       // stop flicker
@@ -793,24 +722,18 @@ function BonusPrizeShuffler({
         clearInterval(shuffleIntervalRef.current);
         shuffleIntervalRef.current = null;
       }
-
       const finalPrize = BONUS_PRIZES[Math.floor(Math.random() * BONUS_PRIZES.length)];
       console.log("[Shuffler] finalPrize ->", finalPrize);
-
       // show the final prize locally (preview), do NOT set parent prize yet
       setPreviewPrize(finalPrize);
-
       // stop spin sound and play ding
       try { sfx?.stop?.("spin"); } catch (e) {}
       try { sfx?.play?.("ding"); } catch (e) {}
-
       // clear the spinning flag (keeps shuffler visible because we haven't set parent prize)
       setBonusSpinnerSpinning(false);
-
       // Pause so users can see the landed prize, then set parent prize & open consonants
       pauseTimeoutRef.current = setTimeout(() => {
         pauseTimeoutRef.current = null;
-
         // defensive phase/bonusRound ensure
         try {
           if (typeof setPhase === "function") setPhase("bonus");
@@ -818,7 +741,6 @@ function BonusPrizeShuffler({
         } catch (e) {
           console.warn("[Shuffler] error setting phase/bonusRound", e);
         }
-
         // 1) set the parent-level bonusPrize (this may flip other UI)
         try {
           setBonusPrize(finalPrize);
@@ -826,7 +748,6 @@ function BonusPrizeShuffler({
         } catch (e) {
           console.warn("[Shuffler] failed to set parent bonusPrize", e);
         }
-
         // 2) open the consonant modal
         try {
           setBonusHideBoard(true);
@@ -844,21 +765,17 @@ function BonusPrizeShuffler({
         } catch (e) {
           console.warn("[Shuffler] failed to open consonant modal", e);
         }
-
         // Keep startRef true so further clicks are ignored; the parent state
         // (bonusPrize) will also keep the button disabled. No need to reset isLocked.
       }, PAUSE_AFTER_LAND_MS);
-
       finishTimeoutRef.current = null;
     }, 2400); // shuffle duration
   };
-
   const buttonLabel = bonusPrize
     ? `PRIZE SELECTED: ${bonusPrize}`
     : bonusSpinnerSpinning
     ? "SHUFFLING..."
     : "🎁 SELECT PRIZE 🎁";
-
   return (
     <div className="max-w-7xl w-full mx-auto text-center py-8 flex flex-col items-center justify-center min-h-screen">
       <div className="mb-8">
@@ -866,7 +783,6 @@ function BonusPrizeShuffler({
         <p className="text-3xl font-bold text-yellow-300 [text-shadow:0_4px_8px_rgba(0,0,0,0.5)]">Good luck: {displayBonusPlayer}!</p>
         <p className="text-xl text-white/90 mt-4">Click the button to see what prize you're playing for!</p>
       </div>
-
       <div className="mb-8 h-32 flex items-center justify-center">
         <div aria-live="polite" aria-atomic="true" className="text-center">
           {bonusPrize ? (
@@ -878,7 +794,6 @@ function BonusPrizeShuffler({
           )}
         </div>
       </div>
-
       <div className="flex flex-col items-center gap-4">
         <button
           onClick={startShuffle}
@@ -896,17 +811,9 @@ function BonusPrizeShuffler({
     </div>
   );
 }
-
-
-
-
-
-
-
-
-
 export default function App() {
   const [phase, setPhase] = useState("setup");
+   const [roundWinnerIndex, setRoundWinnerIndex] = useState(null); // Add this line
   const [teamCount, setTeamCount] = useState(3);
   // default team names as Team 1/2/3 for scalability
   const [teamNames, setTeamNames] = useState(["Team 1", "Team 2", "Team 3"]);
@@ -916,23 +823,15 @@ export default function App() {
   const [letters, setLetters] = useState(() => new Set());
   const [board, setBoard] = useState(() => normalizeAnswer(FALLBACK[0].answer));
   const [category, setCategory] = useState(FALLBACK[0].category || "PHRASE");
-
   const wheelContainerRef = useRef(null);
   const zoomContainerRef = useRef(null);
   const spinButtonRef = useRef(null); // <-- ADD THIS LINE
 const blockingOverlayRef = useRef(null);
  const mobileCanvasRef = useRef(null);
   const mobileSpinButtonRef = useRef(null);
-
-
-
-
 // Desktop-specific refs
 const desktopCanvasRef = useRef(null);
 const desktopSpinButtonRef = useRef(null);
-
-
-
   const [teams, setTeams] = useState([
     { name: "Team 1", total: 0, round: 0, prizes: [], holding: [] },
     { name: "Team 2", total: 0, round: 0, prizes: [], holding: [] },
@@ -940,7 +839,6 @@ const desktopSpinButtonRef = useRef(null);
   ]);
   const [active, setActive] = useState(0);
   const [currentWedges, setCurrentWedges] = useState([...WEDGES]);
-
   // wheel state
   const [spinning, setSpinning] = useState(false);
   const [angle, setAngle] = useState(0);
@@ -953,7 +851,6 @@ const desktopSpinButtonRef = useRef(null);
   const [chargeSession, setChargeSession] = useState(0);
   const [snapChargeToZero, setSnapChargeToZero] = useState(false);
   const finishingRef = useRef(false);
-
   const [testTshirtMode, setTestTshirtMode] = useState(false);
   const [bonusPrep, setBonusPrep] = useState(false);
   const chargeIntervalRef = useRef(null);
@@ -983,15 +880,12 @@ const desktopSpinButtonRef = useRef(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showWinScreen, setShowWinScreen] = useState(false);
   const [roundWinner, setRoundWinner] = useState(null);
-
   // Vowel/Solve modals
   const [showVowelModal, setShowVowelModal] = useState(false);
   const [showSolveModal, setShowSolveModal] = useState(false);
   const [solveGuess, setSolveGuess] = useState("");
   const [isRevealingLetters, setIsRevealingLetters] = useState(false);
-
   
-
   // Bonus round state
   const [bonusRound, setBonusRound] = useState(false);
   const [bonusSpinning, setBonusSpinning] = useState(false);
@@ -1021,13 +915,10 @@ const bonusSpinnerRef = useRef(null);
   const [bonusRevealing, setBonusRevealing] = useState(false);
   const [roundsCount, setRoundsCount] = useState(5);
   const [selectedPuzzles, setSelectedPuzzles] = useState(FALLBACK);
-
 // ---- free-typing setup helpers ----
   const [tempTeamCount, setTempTeamCount] = useState(String(teamCount));
   const [tempRoundsCount, setTempRoundsCount] = useState(String(roundsCount));
-
   const chargeLoopTimeoutRef = useRef(null);
-
 // keep temps synced when phase/teamCount/roundsCount change (so returning to setup shows real current values)
   useEffect(() => {
     if (phase === "setup") {
@@ -1036,7 +927,6 @@ const bonusSpinnerRef = useRef(null);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, teamCount, roundsCount]);
-
   const parseIntSafe = (str) => {
     const n = parseInt((str || "").trim(), 10);
     return Number.isFinite(n) ? n : NaN;
@@ -1050,7 +940,6 @@ const bonusSpinnerRef = useRef(null);
     });
     return out;
   }
-
  function applyTempTeamCount() {
     const n = parseIntSafe(tempTeamCount);
     const final = Number.isFinite(n) ? Math.min(MAX_TEAMS, Math.max(2, n)) : teamCount;
@@ -1061,7 +950,6 @@ const bonusSpinnerRef = useRef(null);
     });
     setTempTeamCount(String(final));
   }
-
   function applyTempRoundsCount() {
     const n = parseIntSafe(tempRoundsCount);
     const maxRounds = Math.max(1, puzzles.length || FALLBACK.length);
@@ -1069,15 +957,10 @@ const bonusSpinnerRef = useRef(null);
     setRoundsCount(final);
     setTempRoundsCount(String(final));
   }
-
-
-
 // ---- end helpers ----
-
   const [winners, setWinners] = useState([]);
   const winnersRef = useRef([]);
   const [showStats, setShowStats] = useState(false);
-
 const [gameStats, setGameStats] = useState({
     totalSpins: 0,
     bankrupts: 0,
@@ -1091,7 +974,6 @@ const [gameStats, setGameStats] = useState({
     wedgeStats: {},
     puzzlesStarted: 0,
     maxComeback: 0,
-
     // NEW ENHANCED STATS
     turnStartTime: null,
     totalTurnTime: 0,
@@ -1102,15 +984,12 @@ const [gameStats, setGameStats] = useState({
     categoryStats: {},
     incorrectLetters: {},
   });
-
-
 // Remove the gameStats initialization from the useEffect and create a separate function
 const initializeGameStats = useCallback(() => {
   const puzzlesCount = (puzzles && puzzles.length) || FALLBACK.length;
   const puzzlesStarted = Math.max(1, Math.min(roundsCount, puzzlesCount));
   const firstPuzzle = (selectedPuzzles && selectedPuzzles[0]) || (puzzles && puzzles[0]) || FALLBACK[0];
   const initialCategory = firstPuzzle?.category || "PHRASE";
-
   return {
     totalSpins: 0,
     bankrupts: 0,
@@ -1139,20 +1018,14 @@ const initializeGameStats = useCallback(() => {
     },
   };
 }, [roundsCount, puzzles, selectedPuzzles]);
-
 // Initialize/reset gameStats when entering setup (or when puzzles/rounds change)
 useEffect(() => {
   if (phase === "setup") {
     setGameStats(initializeGameStats());
   }
 }, [phase, initializeGameStats]);
-
-
-
   const sfx = useSfx();
 const imagesLoaded = useImagePreloader(); // ADD THIS LINE
-
-
   const displayBonusPlayer = useMemo(() => {
     if (bonusWinnerSpinning) return selectedBonusWinner || "?";
     if (Array.isArray(winners) && winners.length) return winners[0];
@@ -1161,7 +1034,6 @@ const imagesLoaded = useImagePreloader(); // ADD THIS LINE
     const top = teams.find((t) => t.total === max);
     return top?.name || teams[active]?.name || "Team";
   }, [bonusWinnerSpinning, selectedBonusWinner, winners, teams, active]);
-
   const shuffle = (arr) => {
     const a = arr.slice();
     for (let i = a.length - 1; i > 0; i--) {
@@ -1172,23 +1044,18 @@ const imagesLoaded = useImagePreloader(); // ADD THIS LINE
     }
     return a;
   };
-
   const selectRandomPuzzles = (pool, n) => {
     if (!Array.isArray(pool) || pool.length === 0) return FALLBACK.slice(0, n);
     const count = Math.max(1, Math.min(n, pool.length));
     const shuffled = shuffle(pool);
     return shuffled.slice(0, count);
   };
-
   const isSolved = () => board.every((b) => b.shown);
   const allVowelsGuessed = Array.from(VOWELS).every((vowel) => letters.has(vowel));
   const canSpin = !spinning && !awaitingConsonant && !isSolved() && !bonusRound && !isRevealingLetters;
   const canBuyVowel = (teams[active]?.round ?? 0) >= VOWEL_COST && !spinning && !isSolved() && hasSpun && !allVowelsGuessed && !bonusRound && !isRevealingLetters;
   // allow solve while mystery spinner is shown so solver can claim the final mystery prize immediately
   const canSolve = ( (!spinning || showMysterySpinner) && hasSpun && !isSolved() && !bonusRound && !isRevealingLetters );
-
-
-
   useEffect(() => {
     loadPuzzles().then((data) => {
       setPuzzles(data.main);
@@ -1202,7 +1069,6 @@ const imagesLoaded = useImagePreloader(); // ADD THIS LINE
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
   useEffect(() => {
     const onBlur = () => endCharge();
     const onVis = () => {
@@ -1215,15 +1081,12 @@ const imagesLoaded = useImagePreloader(); // ADD THIS LINE
       document.removeEventListener("visibilitychange", onVis);
     };
   }, []);
-
   const canvasRef = useRef(null);
   const zoomCanvasRef = useRef(null);
-
 useEffect(() => () => {
   if (chargeIntervalRef.current) clearInterval(chargeIntervalRef.current);
   if (chargeLoopTimeoutRef.current) clearTimeout(chargeLoopTimeoutRef.current);
 }, []);
-
   useEffect(() => {
     return () => {
       if (bonusSpinRef.current) {
@@ -1240,7 +1103,6 @@ useEffect(() => () => {
       }
     };
   }, []);
-
   useEffect(() => {
     return () => {
       if (revealTimeoutRef.current) {
@@ -1249,7 +1111,6 @@ useEffect(() => () => {
       }
     };
   }, []);
-
   useEffect(() => {
     return () => {
       if (bonusResultHideTimeoutRef.current) {
@@ -1258,7 +1119,6 @@ useEffect(() => () => {
       }
     };
   }, []);
-
   useEffect(() => {
     if (!bonusResult) return;
     const onSkip = (e) => {
@@ -1276,14 +1136,12 @@ useEffect(() => () => {
     window.addEventListener("keydown", onSkip);
     return () => window.removeEventListener("keydown", onSkip);
   }, [bonusResult]);
-
   useEffect(() => {
     return () => {
       if (winShowTimeoutRef.current) clearTimeout(winShowTimeoutRef.current);
       if (winHideTimeoutRef.current) clearTimeout(winHideTimeoutRef.current);
     };
   }, []);
-
   useEffect(() => {
     const onFullscreenChange = () => {
       setIsFullscreen(!!document.fullscreenElement);
@@ -1291,18 +1149,14 @@ useEffect(() => () => {
     document.addEventListener("fullscreenchange", onFullscreenChange);
     return () => document.removeEventListener("fullscreenchange", onFullscreenChange);
   }, []);
-
  
-
 // NEW: This effect conditionally resizes the wheel ONLY on mobile screens.
   useEffect(() => {
     const updateWheelSize = () => {
       if (phase === 'play') {
         const screenWidth = window.innerWidth;
         const screenHeight = window.innerHeight;
-
         let newSize;
-
         // Check if we are on a "mobile" screen size (less than 1024px, Tailwind's 'lg' breakpoint)
         if (screenWidth < 1024) {
           // On mobile, use the compact sizing logic
@@ -1314,19 +1168,16 @@ useEffect(() => () => {
           // On desktop, use the original, large, fixed size
           newSize = BASE_WHEEL_PX;
         }
-
         // The zoom logic remains the same
         const potentialZoomSize = newSize * 1.5;
         const finalSize = zoomed 
           ? Math.min(potentialZoomSize, screenWidth * 0.95) 
           : newSize;
         setWheelPx(finalSize);
-
       } else {
         setWheelPx(BASE_WHEEL_PX);
       }
     };
-
     updateWheelSize();
     window.addEventListener('resize', updateWheelSize);
     return () => window.removeEventListener('resize', updateWheelSize);
@@ -1351,7 +1202,6 @@ useEffect(() => () => {
     }
     return () => clearInterval(interval);
   }, [bonusActive, bonusCountdown, bonusResult]);
-
   useEffect(() => {
     const onKeyDown = (e) => {
       if (isRevealingLetters) return;
@@ -1372,7 +1222,6 @@ useEffect(() => () => {
       window.removeEventListener("keydown", onKeyDown);
     };
   }, [phase, canBuyVowel, canSolve, bonusRound, bonusActive, showBonusSolveModal, showVowelModal, showSolveModal, showWinScreen, isRevealingLetters]);
-
   useEffect(() => {
     const onEsc = (e) => {
       if (e.key === "Escape") {
@@ -1389,21 +1238,18 @@ useEffect(() => () => {
     window.addEventListener("keydown", onEsc);
     return () => window.removeEventListener("keydown", onEsc);
   }, []);
-
 useEffect(() => {
   if (phase === "bonus" && bonusSpinnerRef.current && !bonusPrize) {
     drawBonusWheel();
   }
   requestAnimationFrame(() => drawWheel(angle));
 }, [angle, wheelPx, phase, isFullscreen, isCharging, spinPower, zoomed, currentWedges, bonusSpinnerAngle, bonusPrize]);
-
   useEffect(() => () => {
     if (bonusPrepIntervalRef.current) {
       clearInterval(bonusPrepIntervalRef.current);
       bonusPrepIntervalRef.current = null;
     }
   }, []);
-
   useEffect(() => {
     if (phase === "play" && hasSpun && board.length > 0 && board.every((b) => b.shown) && !finishingRef.current) {
       setTimeout(() => {
@@ -1411,7 +1257,6 @@ useEffect(() => {
       }, 750);
     }
   }, [board, phase, hasSpun, landed]);
-
   useEffect(() => {
     if (!showWinScreen) return;
     const onSkipKey = (e) => {
@@ -1439,6 +1284,21 @@ useEffect(() => {
     window.addEventListener("keydown", onSkipKey);
     return () => window.removeEventListener("keydown", onSkipKey);
   }, [showWinScreen, sfx]);
+
+  useEffect(() => {
+    const handleBeforeUnload = (e) => {
+      if (phase === 'play' || phase === 'bonus') {
+        e.preventDefault();
+        e.returnValue = ''; // Required for legacy browsers
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [phase]);
 
   function drawWheel(rot = 0) {
      // NEW: Determine which canvas ref to use based on screen size
@@ -1562,20 +1422,15 @@ const canvas = zoomed ? zoomCanvasRef.current : canvasToDraw;
     ctx.fill();
     ctx.restore();
   }
-
-
 function drawBonusWheel() {
   const canvas = bonusSpinnerRef.current;
   if (!canvas) return;
-
   const ctx = canvas.getContext('2d');
   const size = 400; // This is your internal drawing size
   const displaySize = 800; // Let's try drawing on a larger internal canvas
-
   // Set canvas dimensions for high-resolution drawing
   canvas.width = displaySize;
   canvas.height = displaySize;
-
   // Scale down the canvas element via CSS for display, if it's not already handled.
   // In React, you'd typically apply this via a ref.style or Tailwind/CSS class.
   // Example for direct manipulation (consider if this is the right place in React):
@@ -1584,33 +1439,24 @@ function drawBonusWheel() {
   
   // Scale the context to draw everything at the higher resolution
   ctx.scale(displaySize / size, displaySize / size);
-
-
   const cx = size / 2;
   const cy = size / 2;
   const radius = size / 2 - 40;
-
   ctx.clearRect(0, 0, size, size);
-
   const sections = BONUS_PRIZES.length;
   if (!sections) return;
-
   const sectionAngle = 360 / sections;
   const dir = BONUS_CW ? 1 : -1;
   const colors = ['#ff6b6b', '#4ecdc4', '#45b7d1', '#f9ca24', '#6c5ce7'];
-
   ctx.save();
   ctx.translate(cx, cy);
   ctx.rotate((bonusSpinnerAngle * Math.PI) / 180);
   ctx.translate(-cx, -cy);
-
   for (let i = 0; i < sections; i++) {
     const startDeg = BONUS_START_DEG + dir * i * sectionAngle;
     const endDeg   = startDeg + dir * sectionAngle;
-
     const start = (startDeg * Math.PI) / 180;
     const end   = (endDeg * Math.PI) / 180;
-
     ctx.beginPath();
     ctx.moveTo(cx, cy);
     ctx.arc(cx, cy, radius, start, end, !BONUS_CW);
@@ -1620,15 +1466,12 @@ function drawBonusWheel() {
     ctx.strokeStyle = '#fff';
     ctx.lineWidth = 3;
     ctx.stroke();
-
     const midDeg = startDeg + dir * (sectionAngle / 2);
     const midRad = (midDeg * Math.PI) / 180;
     const label = BONUS_PRIZES[i];
-
     ctx.save();
     ctx.translate(cx, cy);
     ctx.rotate(midRad);
-
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillStyle = '#fff';
@@ -1639,12 +1482,9 @@ function drawBonusWheel() {
     ctx.shadowOffsetX = 3; // Increased offset for shadow
     ctx.shadowOffsetY = 3; // Increased offset for shadow
     ctx.shadowBlur = 6; // Increased blur for a softer shadow
-
     const textRadius = radius * 0.65;
-
     const normalizedMidRad = (midRad % (2 * Math.PI) + (2 * Math.PI)) % (2 * Math.PI);
     const isLeftHalf = normalizedMidRad > Math.PI / 2 && normalizedMidRad < (3 * Math.PI) / 2;
-
     if (isLeftHalf) {
       ctx.rotate(Math.PI);
       ctx.fillText(label, -textRadius, 0);
@@ -1654,9 +1494,7 @@ function drawBonusWheel() {
     
     ctx.restore();
   }
-
   ctx.restore();
-
   // Draw the center hub
   ctx.beginPath();
   ctx.arc(cx, cy, radius * 0.1, 0, Math.PI * 2);
@@ -1677,7 +1515,6 @@ function drawBonusWheel() {
   ctx.lineWidth = 2;
   ctx.stroke();
 }
-
   function wedgeIndexForAngle(a) {
     const two = Math.PI * 2;
     const normalizedAngle = ((a % two) + two) % two;
@@ -1697,7 +1534,6 @@ function drawBonusWheel() {
     }
     return 0;
   }
-
   function angleForWedgeIndex(idx, wedges = currentWedges, useTestMode = false) {
     const two = Math.PI * 2;
     const wedgesToCheck = useTestMode ? wedges.map((w) => (w.t === "tshirt" ? { ...w, size: 3 } : w)) : wedges;
@@ -1713,13 +1549,10 @@ function drawBonusWheel() {
     const normalizedAngle = (two - mid + pointerAngle) % two;
     return normalizedAngle;
   }
-
-
 // Make sure the function that calls startCharge can handle async (pointerdown handlers can call it)
 const startCharge = async () => {
   if (isRevealingLetters || finishingRef.current) return;
   if (!canSpin || isCharging) return;
-
   // immediate sync flag flip
   setIsCharging(true);
   isChargingRef.current = true;
@@ -1728,18 +1561,15 @@ const startCharge = async () => {
   chargeSnapshotRef.current = 0;
   chargeDirRef.current = 1;
   setChargeSession((s) => s + 1);
-
   // stop any leftover timeouts/intervals
   if (chargeLoopTimeoutRef.current) {
     clearTimeout(chargeLoopTimeoutRef.current);
     chargeLoopTimeoutRef.current = null;
   }
-
   // Ensure AudioContext is resumed (this must be in direct response to a user gesture)
   try {
     await sfx.unlock(); // resume audio context if suspended
   } catch (e) {}
-
   // Start the charge sound as a gapless loop. Prefer loop() (which creates a looped BufferSource)
   try {
     await sfx.loop("chargeUp");
@@ -1747,7 +1577,6 @@ const startCharge = async () => {
     // fallback to one-shot (shouldn't be necessary if loop works)
     try { sfx.play("chargeUp"); } catch (e2) {}
   }
-
   // Start the UI charge animation/interval
   requestAnimationFrame(() => {
     setSnapChargeToZero(false);
@@ -1774,69 +1603,54 @@ const startCharge = async () => {
     }, stepMs);
   });
 };
-
 const endCharge = () => {
   // ensure no stale timeout remains
   if (chargeLoopTimeoutRef.current) {
     clearTimeout(chargeLoopTimeoutRef.current);
     chargeLoopTimeoutRef.current = null;
   }
-
   // stop UI interval
   if (chargeIntervalRef.current) {
     clearInterval(chargeIntervalRef.current);
     chargeIntervalRef.current = null;
   }
-
   // read & clear sync flag
   const wasCharging = isChargingRef.current;
   isChargingRef.current = false;
-
   // stop the looped charge sound
   try { sfx.stopLoop("chargeUp"); } catch (e) {
     try { sfx.stop("chargeUp"); } catch (e2) {}
   }
-
   // If we never actually started charging (race), just bail
   if (!wasCharging) return;
-
   // use the snapshot (keeps behavior deterministic even if React state lags)
   const power = Math.max(1, Math.round(chargeSnapshotRef.current || 0));
   chargeSnapshotRef.current = 0;
-
   setIsCharging(false);
   setSnapChargeToZero(true);
   setSpinPower(0);
-
   // small rAF to clear the snap flag
   requestAnimationFrame(() => setSnapChargeToZero(false));
-
   // finally begin the spin action
   onSpin(power);
 };
-
-
 // NEW: This useEffect now applies touch listeners to BOTH the mobile and desktop spin buttons
   useEffect(() => {
     const buttons = [spinButtonRef.current, mobileSpinButtonRef.current].filter(Boolean);
     if (buttons.length === 0) return;
-
     const handleTouchStart = (e) => {
       e.preventDefault();
       startCharge();
     };
-
     const handleTouchEnd = (e) => {
       e.preventDefault();
       endCharge();
     };
-
     buttons.forEach(button => {
         button.addEventListener('touchstart', handleTouchStart, { passive: false });
         button.addEventListener('touchend', handleTouchEnd, { passive: false });
         button.addEventListener('touchcancel', handleTouchEnd, { passive: false });
     });
-
     return () => {
       buttons.forEach(button => {
         button.removeEventListener('touchstart', handleTouchStart);
@@ -1845,26 +1659,20 @@ const endCharge = () => {
       });
     };
   }, [canSpin, startCharge, endCharge]);
-
-
   useEffect(() => {
     const overlay = blockingOverlayRef.current;
     if (!overlay) return;
-
     const blockEvent = (e) => {
       e.preventDefault();
       e.stopPropagation();
     };
-
     // Add the listener with passive: false to fix the warning
     overlay.addEventListener('touchstart', blockEvent, { passive: false });
-
     // Cleanup
     return () => {
       overlay.removeEventListener('touchstart', blockEvent);
     };
   }, []);
-
   function onSpin(power = 10) {
     if (finishingRef.current || isRevealingLetters) return;
     if (spinning || awaitingConsonant || isSolved() || bonusRound) return;
@@ -1874,7 +1682,6 @@ const endCharge = () => {
     setZoomed(true);
     
    try { sfx.play("spin"); } catch (e) {console.error("spin play failed", e);}
-
 const currentTeamNameForStats = teams[active]?.name ?? `Team ${active + 1}`;
 setGameStats((prev) => {
   const prevTeam = prev.teamStats[currentTeamNameForStats] || {};
@@ -1898,7 +1705,6 @@ setGameStats((prev) => {
     },
   };
 });
-
     const baseTurns = 3;
     const powerTurns = Math.round((power / 100) * 6);
     const randomTurns = Math.floor(Math.random() * 2);
@@ -1940,7 +1746,6 @@ setGameStats((prev) => {
       requestAnimationFrame(tick);
     });
   }
-
   function animateAngle(from, to, ms, easing = "out", onDone) {
     const start = performance.now();
     const ease = easing === "inout" ? (x) => 0.5 * (1 - Math.cos(Math.PI * Math.min(1, x))) : (x) => 1 - Math.pow(1 - Math.min(1, x), 3);
@@ -1953,7 +1758,6 @@ setGameStats((prev) => {
     };
     requestAnimationFrame(step);
   }
-
  function handleLanding(w) {
     if (!w) {
        landedOwnerRef.current = null;
@@ -2014,7 +1818,6 @@ setGameStats((prev) => {
             const targetAngle = angleForWedgeIndex(mysteryIndex, currentWedges, testTshirtMode);
             setAngle(targetAngle);
           }
-
           // IMPORTANT: always treat mystery final as a PRIZE (no cash)
           if (String(finalPrize).toUpperCase().includes("T-SHIRT")) {
              try { sfx.play("tshirt"); } catch (e) {}
@@ -2025,7 +1828,6 @@ setGameStats((prev) => {
             label: finalPrize,
             prize: { type: String(finalPrize).toLowerCase(), label: finalPrize, color: "#E6007E" },
           });
-
           setTimeout(() => {
             setShowMysterySpinner(false);
             setAwaitingConsonant(true);
@@ -2053,7 +1855,6 @@ setGameStats((prev) => {
           },
         };
       });
-
       setTeams((ts) => ts.map((t, i) => (i === active ? { ...t, round: 0, holding: [] } : t)));
       try { sfx.play("bankrupt"); } catch (e) {}
       if (tshirtHolder === active) setTshirtHolder(null);
@@ -2076,7 +1877,6 @@ setGameStats((prev) => {
       passTurn();
     }
   }
-
   function guessLetter(ch) {
     if (isRevealingLetters) return;
     if (!awaitingConsonant) return;
@@ -2104,14 +1904,11 @@ setGameStats((prev) => {
       },
     };
   });
-
       // NEW: Determine wedge value ONLY when it's a cash wedge.
       // Mystery/prize/tshirt should not award money per letter.
       const w = landed || { t: "cash", v: 0 };
       const wedgeValue = (w.t === "cash" && typeof w.v === "number") ? w.v : 0;
-
       setTeams((ts) => ts.map((t, i) => (i === active ? { ...t, round: t.round + wedgeValue * hitIndices.length } : t)));
-
       const pushHolding = (label) => {
         const normalized = String(label).toUpperCase();
         setTeams((prev) =>
@@ -2172,7 +1969,6 @@ setGameStats((prev) => {
       passTurn();
     }
   }
-
   function handleBuyVowel(ch) {
     if (isRevealingLetters) return;
     setShowVowelModal(false);
@@ -2253,7 +2049,6 @@ setGameStats((prev) => {
        try { sfx.play("wrongLetter"); } catch (e) {}
     }
   }
-
   function handleSolve() {
     setShowSolveModal(false);
     if (isRevealingLetters) return;
@@ -2268,13 +2063,12 @@ setGameStats((prev) => {
     }
     setSolveGuess("");
   }
-
   function finishPuzzle(solved, lastWedge) {
     if (solved) {
       if (finishingRef.current) return;
       finishingRef.current = true;
+       setRoundWinnerIndex(active);
       setIsRevealingLetters(true);
-
       // E: increment puzzlesSolved in gameStats and per-team puzzlesSolved
      try {
         const solverName = teams[active]?.name;
@@ -2306,10 +2100,8 @@ setGameStats((prev) => {
         // defensive - don't crash if teams/active not available for some reason
         setGameStats((prev) => ({ ...prev, puzzlesSolved: (prev.puzzlesSolved || 0) + 1 }));
       }
-
       // Resolve spinner if needed and capture the final landed wedge locally
       let resolvedLanded = lastWedge || landed;
-
       // C: defensively clear any running mystery/bonus intervals so we don't leak or double-finalize
       try {
         if (mysterySpinRef.current) {
@@ -2321,13 +2113,11 @@ setGameStats((prev) => {
           bonusSpinRef.current = null;
         }
       } catch (e) {}
-
       if (showMysterySpinner) {
         // If we were mid-mystery-spin, decide final prize now
         const finalPrize = mysteryPrize || BONUS_PRIZES[Math.floor(Math.random() * BONUS_PRIZES.length)];
         setMysteryPrize(finalPrize);
         setShowMysterySpinner(false);
-
         // IMPORTANT: Always treat finalPrize as a PRIZE (no numeric cash results)
         resolvedLanded = {
           t: "prize",
@@ -2342,13 +2132,11 @@ setGameStats((prev) => {
         // ensure we use the freshest landed available
         resolvedLanded = landed || lastWedge || resolvedLanded;
       }
-
       // Update teams: move any 'holding' into prizes AND also award resolvedLanded prize directly to solver
       setTeams((prevTs) => {
         const specialWedgesWon = [];
         const updated = prevTs.map((t, i) => {
           if (i !== active) return { ...t, round: 0, holding: [] };
-
        const extraFromCash =
             resolvedLanded &&
             resolvedLanded.t === "cash" &&
@@ -2356,9 +2144,7 @@ setGameStats((prev) => {
             landedOwnerRef.current === active
               ? resolvedLanded.v
               : 0;
-
         const updatedTeam = { ...t, total: t.total + t.round + SOLVE_BONUS, round: 0 };
-
           // move earned holding -> prizes
           const holdingArr = Array.isArray(t.holding) ? t.holding : t.holding ? [t.holding] : [];
           if (holdingArr.length > 0) {
@@ -2369,7 +2155,6 @@ setGameStats((prev) => {
               else specialWedgesWon.push("mystery");
             });
           }
-
        if (
             resolvedLanded &&
             resolvedLanded.t === "prize" &&
@@ -2389,11 +2174,9 @@ setGameStats((prev) => {
               }
             }
           }
-
           updatedTeam.holding = []; // clear holding after awarding
           return updatedTeam;
         });
-
         // record special wedges for stats/record but DO NOT convert/replace any wedges
         setWonSpecialWedges(specialWedgesWon);
       // Track comeback statistics
@@ -2419,16 +2202,13 @@ setGameStats((prev) => {
             };
           });
         }
-
         const max = updated.length ? Math.max(...updated.map((t) => t.total)) : -Infinity;
         const topTeams = updated.filter((t) => t.total === max);
         const winnerNames = topTeams.map((t) => t.name);
         winnersRef.current = winnerNames;
         setWinners(winnerNames);
-
         return updated;
       });
-
       // If the resolvedLanded included a tshirt prize that we just awarded to the solver via the prizes push
       // ensure tshirtHolder is correctly set to the solver index
       if (resolvedLanded && resolvedLanded.t === "prize" && resolvedLanded.prize && String(resolvedLanded.prize.label).toUpperCase().includes("T-SHIRT")) {
@@ -2436,13 +2216,11 @@ setGameStats((prev) => {
           setTshirtHolder(active);
         } catch (e) {}
       }
-
       // Reveal remaining letters (the logic below mirrors earlier behavior)
       const hideIndices = board
         .map((cell, idx) => ({ ...cell, idx }))
         .filter((c) => isLetter(c.ch) && !c.shown)
         .map((c) => c.idx);
-
       if (hideIndices.length === 0) {
         if (winShowTimeoutRef.current) clearTimeout(winShowTimeoutRef.current);
         winShowTimeoutRef.current = setTimeout(() => {
@@ -2461,17 +2239,14 @@ setGameStats((prev) => {
         }, 250);
         return;
       }
-
       hideIndices.forEach((boardIndex, i) => {
         setTimeout(() => {
           try { sfx.play("ding"); } catch (e) {}
           setBoard((currentBoard) => currentBoard.map((cell, idx) => (idx === boardIndex ? { ...cell, shown: true } : cell)));
         }, i * SOLVE_REVEAL_INTERVAL);
       });
-
       const totalRevealTime = hideIndices.length * SOLVE_REVEAL_INTERVAL;
 const WIN_SHOW_DELAY=300
-
       if (winShowTimeoutRef.current) clearTimeout(winShowTimeoutRef.current);
       winShowTimeoutRef.current = setTimeout(() => {
         try { sfx.play("solve"); } catch (e) {}
@@ -2492,27 +2267,21 @@ const WIN_SHOW_DELAY=300
       setTeams((ts) => ts.map((t) => ({ ...t, round: 0, holding: [] })));
     }
   }
-
-
 const passTurn = () => {
   if (!teams || teams.length === 0) {
     setAwaitingConsonant(false);
     return;
   }
-
   const startTs = gameStats?.turnStartTime;
   const currentTeamName = teams[active]?.name ?? `Team ${active + 1}`;
-
   if (startTs && Number.isFinite(startTs)) {
     const turnDuration = Date.now() - startTs;
-
     setGameStats((prev) => {
       const prevTeam = prev.teamStats?.[currentTeamName] || {};
       const newTeamTotalTurnTime = (prevTeam.totalTurnTime || 0) + turnDuration;
       
       // FIX: Add a new counter for completed turns
       const newTeamCompletedTurns = (prevTeam.completedTurns || 0) + 1;
-
       return {
         ...prev,
         totalTurnTime: (prev.totalTurnTime || 0) + turnDuration,
@@ -2534,176 +2303,91 @@ const passTurn = () => {
     // This case likely happens at the start of a turn that doesn't involve a spin
     setGameStats((prev) => ({ ...prev, turnStartTime: Date.now() }));
   }
-
   // Rotate active player & reset awaiting state
   setActive((a) => nextIdx(a, teams.length));
   setAwaitingConsonant(false);
 };
     
 function nextPuzzle() {
-
     finishingRef.current = false;
-
-
-
     // IMPORTANT CHANGE: Do NOT convert T-SHIRT wedges to cash.
-
     // We keep MYSTERY (wild) and T-SHIRT wedges exactly as-is in currentWedges.
-
     // Clear tshirtHolder only when appropriate (we reset holder between puzzles).
-
     if (wonSpecialWedges.length > 0) {
-
       setTshirtHolder(null); // reset holder across puzzles
-
       setWonSpecialWedges([]); // keep for stats but do not mutate wedges
-
     }
-
-
-
     setMysteryPrize(null);
-
     landedOwnerRef.current = null;
-
     
-
     const next = idx + 1;
-
     if (next >= selectedPuzzles.length) {
-
       console.log("BONUS FLOW: Entering bonus round setup");
-
       let topTeams = [];
-
       if (winnersRef.current && winnersRef.current.length > 0) {
-
         topTeams = teams.filter((t) => winnersRef.current.includes(t.name));
-
       } else if (winners && winners.length > 0) {
-
         topTeams = teams.filter((t) => winners.includes(t.name));
-
       } else if (teams && teams.length > 0) {
-
         const maxTotal = Math.max(...teams.map((t) => t.total));
-
         const finalWinners = teams.filter((t) => t.total === maxTotal).map((t) => t.name);
-
         winnersRef.current = finalWinners;
-
         setWinners(finalWinners);
-
         topTeams = teams.filter((t) => finalWinners.includes(t.name));
-
       } else {
-
         setPhase("done");
-
         return;
-
       }
-
       const randomBonusIndex = bonusPuzzles && bonusPuzzles.length ? Math.floor(Math.random() * bonusPuzzles.length) : 0;
-
       const bonusPuzzle = (bonusPuzzles && bonusPuzzles[randomBonusIndex]) || FALLBACK[0];
-
       if (topTeams.length > 0) {
-
         console.log("BONUS FLOW: Setting up bonus puzzle for teams:", topTeams.map(t => t.name));
-
         setBoard(normalizeAnswer(bonusPuzzle.answer));
-
         setCategory(bonusPuzzle.category || "PHRASE");
-
         setBonusRound(true);
-
         setPhase("bonus");
-
          if (topTeams.length > 1) {
-
           console.log("BONUS FLOW: Multiple winners, showing bonus selector");
-
           setShowBonusSelector(true);
-
         } else {
-
           console.log("BONUS FLOW: Single winner, going directly to bonus");
-
           const single = topTeams[0].name;
-
           winnersRef.current = [single];
-
           setWinners([single]);
-
         }
-
         return;
-
       } else {
-
         setPhase("done");
-
         return;
-
       }
-
     }
-
     setIdx(next);
-
     const p = selectedPuzzles[next] || FALLBACK[0];
-
     setBoard(normalizeAnswer(p.answer));
-
     setCategory(p.category || "PHRASE");
-
     // Track category for statistics
-
     setGameStats(prev => {
-
       const categoryData = prev.categoryStats[p.category || "PHRASE"] || { attempted: 0, solved: 0 };
-
       return {
-
         ...prev,
-
         categoryStats: {
-
           ...prev.categoryStats,
-
           [p.category || "PHRASE"]: {
-
             ...categoryData,
-
             attempted: categoryData.attempted + 1
-
           }
-
         }
-
       };
-
     });
-
     setLetters(new Set());
-
     setLanded(null);
-
     setAwaitingConsonant(false);
-
     setActive((a) => nextIdx(a, teams.length));
-
+    setActive(nextIdx(roundWinnerIndex, teams.length));
     setTeams((ts) => ts.map((t) => ({ ...t, round: 0, holding: [] })));
-
     setAngle(0);
-
     setHasSpun(false);
-
   }
-
-
-
   function startBonusWinnerSelector() {
     setBonusWinnerSpinning(true);
     let spinCount = 0;
@@ -2735,60 +2419,46 @@ function nextPuzzle() {
       }
     }, 150);
   }
-
-
   
   function startBonusRound() {
   setBonusPrize("");
   setBonusHideBoard(true);
   setShowBonusSpinner(true);
 }
-
-
 // Optional tunables (longer spin, no linger)
 const SPIN_MIN_TURNS = 12;
 const SPIN_MAX_TURNS = 18;
 const SPIN_DURATION_MS = 5200;
-
 function spinBonusWheel() {
   if (bonusSpinnerSpinning) return;
-
   // PREDETERMINE THE PRIZE
   const chosenPrizeIndex = Math.floor(Math.random() * BONUS_PRIZES.length);
   const chosenPrize = BONUS_PRIZES[chosenPrizeIndex];
-
   setBonusSpinnerSpinning(true);
   try { sfx.play("spin"); } catch (_) {}
-
   const spins = Math.floor(Math.random() * (SPIN_MAX_TURNS - SPIN_MIN_TURNS + 1)) + SPIN_MIN_TURNS;
-
 // Calculate exact angle to land on chosen prize
   const sections = BONUS_PRIZES.length;
   const sectionAngle = 360 / sections;
   const targetAngle = chosenPrizeIndex * sectionAngle + sectionAngle / 2;
     // Add multiple rotations plus the target
   const totalRotation = spins * 360 + targetAngle;
-
   const startTime = performance.now();
   const startAngle = bonusSpinnerAngle;
   const easeOutCubic = (t) => 1 - Math.pow(1 - t, 3);
-
   const animate = (now) => {
     const progress = Math.min((now - startTime) / SPIN_DURATION_MS, 1);
     const currentAngle = startAngle + totalRotation * easeOutCubic(progress);
     setBonusSpinnerAngle(currentAngle % 360);
-
     if (progress < 1) {
       requestAnimationFrame(animate);
       return;
     }
-
  // Just set the predetermined prize - no calculations needed!
     setBonusPrize(chosenPrize);
     
     try { sfx.stop("spin"); } catch (_) {}
     setBonusSpinnerSpinning(false);
-
   // Proceed to letter selection
     setTimeout(() => {
       setShowBonusSpinner(false);
@@ -2797,41 +2467,31 @@ function spinBonusWheel() {
       setBonusLetterType("consonant");
     }, 500);
   };
-
     requestAnimationFrame(animate);
 }
-
-
 function selectBonusPrizeAndSnap(currentAngle, setBonusPrize, setBonusSpinnerAngle) {
   const sections = BONUS_PRIZES.length;
   if (!sections) return;
-
   const sectionAngle = 360 / sections;
-
   // wheel’s absolute final angle normalized (0..359)
   const finalDeg = ((currentAngle % 360) + 360) % 360;
-
   // angle under the fixed 12 o’clock pointer using SAME origin as draw
   const angleUnderPointer = BONUS_CW
     ? (360 - finalDeg - BONUS_START_DEG + 360) % 360
     : (finalDeg - BONUS_START_DEG + 360) % 360;
-
   // center selection to avoid border off-by-one
   const prizeIndex = Math.floor((angleUnderPointer + sectionAngle / 2) / sectionAngle) % sections;
   const selectedPrize = BONUS_PRIZES[prizeIndex];
   setBonusPrize(selectedPrize);
-
   // snap instantly to exact center of the winning slice (no linger)
   const centeredUnderPointer = prizeIndex * sectionAngle + sectionAngle / 2;
   const desiredFinalDeg = BONUS_CW
     ? (360 - ((centeredUnderPointer + BONUS_START_DEG) % 360) + 360) % 360
     : ((centeredUnderPointer + BONUS_START_DEG) % 360 + 360) % 360;
-
   // rotate minimal amount to align exactly to center
   const delta = ((finalDeg - desiredFinalDeg + 540) % 360) - 180;
   setBonusSpinnerAngle(currentAngle - delta);
 }
-
   function handleBonusLetter(letter) {
     if (bonusLetterType === "consonant") {
       setBonusConsonants((prev) => {
@@ -2855,7 +2515,6 @@ function selectBonusPrizeAndSnap(currentAngle, setBonusPrize, setBonusSpinnerAng
       }
     }
   }
-
   function revealBonusLetters(overrideAllBonusLetters = null) {
     console.log("revealBonusLetters: instant reveal (no animation/no sounds)");
     try { sfx.stop("ding"); } catch (e) {}
@@ -2875,7 +2534,6 @@ function selectBonusPrizeAndSnap(currentAngle, setBonusPrize, setBonusSpinnerAng
     setBonusCountdown(30);
     setBonusReadyModalVisible(true);
   }
-
   function pressReadyStartBonus() {
     if (readyDisabled || bonusActive) return;
     setReadyDisabled(true);
@@ -2891,7 +2549,6 @@ function selectBonusPrizeAndSnap(currentAngle, setBonusPrize, setBonusSpinnerAng
     }, 60);
     setTimeout(() => setReadyDisabled(false), 1500);
   }
-
   function handleBonusSolve() {
     setShowBonusSolveModal(false);
     setBonusActive(false);
@@ -2924,7 +2581,6 @@ function selectBonusPrizeAndSnap(currentAngle, setBonusPrize, setBonusSpinnerAng
       setPhase("done");
     }, 7000);
   }
-
   function restartAll() {
     try { sfx.stop("solve"); } catch (e) {}
     if (winShowTimeoutRef.current) { clearTimeout(winShowTimeoutRef.current); winShowTimeoutRef.current = null; }
@@ -2935,8 +2591,6 @@ function selectBonusPrizeAndSnap(currentAngle, setBonusPrize, setBonusSpinnerAng
     if (bonusResultHideTimeoutRef.current) { clearTimeout(bonusResultHideTimeoutRef.current); bonusResultHideTimeoutRef.current = null; }
     finishingRef.current = false;
     setIsRevealingLetters(false);
-
-
  const count = Math.max(1, Math.min(roundsCount, (puzzles && puzzles.length) || FALLBACK.length));
   const chosen = selectRandomPuzzles(puzzles && puzzles.length ? puzzles : FALLBACK, count);
   setSelectedPuzzles(chosen);
@@ -2983,7 +2637,6 @@ setGameStats({
     categoryStats: {},
     incorrectLetters: {},
   });
-
     setLetters(new Set());
     setLanded(null);
     setAwaitingConsonant(false);
@@ -2993,11 +2646,9 @@ setGameStats({
     setBonusWinnerName(null);
     landedOwnerRef.current = null;
     
-
     // rebuild teams from normalized teamNames (pad/truncate to teamCount)
     const names = makeTeamNamesArray(teamCount, teamNames);
     setTeams(names.map((name) => ({ name, total: 0, round: 0, prizes: [], holding: [] })));
-
     setActive(0);
     setAngle(0);
     setZoomed(false);
@@ -3031,7 +2682,6 @@ setGameStats({
     setBonusResult(null);
     setBonusWinnerName(null);
   }
-
   function backToSetup() {
     try { sfx.stop("solve"); } catch (e) {}
     if (winShowTimeoutRef.current) { clearTimeout(winShowTimeoutRef.current); winShowTimeoutRef.current = null; }
@@ -3087,7 +2737,6 @@ setGameStats({
     setBonusWinnerName(null);
     setBonusReadyModalVisible(false);
   }
-
   function toggleFullscreen() {
     if (!document.fullscreenElement) {
       document.documentElement.requestFullscreen?.().catch((err) => {
@@ -3097,7 +2746,6 @@ setGameStats({
       document.exitFullscreen?.();
     }
   }
-
   const wordTokens = useMemo(() => {
     const toks = [];
     let i = 0;
@@ -3116,7 +2764,6 @@ setGameStats({
     }
     return toks;
   }, [board]);
-
 const TeamCard = ({ t, i }) => {
   const prizeCounts = (t.prizes || []).reduce((acc, p) => {
     const key = String(p).toUpperCase();
@@ -3128,7 +2775,6 @@ const TeamCard = ({ t, i }) => {
     acc[k] = (acc[k] || 0) + 1;
     return acc;
   }, {});
-
   return (
     <div
       className={cls(
@@ -3175,9 +2821,6 @@ const TeamCard = ({ t, i }) => {
     </div>
   );
 };
-
-
-
   const VowelModal = () => (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80">
       <div className="bg-white rounded-xl p-6 w-full max-w-sm text-center">
@@ -3193,7 +2836,6 @@ const TeamCard = ({ t, i }) => {
       </div>
     </div>
   );
-
   const SolveModal = () => {
     const inputRef = useRef(null);
     useEffect(() => {
@@ -3225,7 +2867,6 @@ onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); e.stopPropagati
       </div>
     );
   };
-
   const MysterySpinnerModal = () => (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80">
       <div className="bg-white rounded-xl p-8 w-full max-w-lg text-center">
@@ -3242,7 +2883,6 @@ onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); e.stopPropagati
       </div>
     </div>
   );
-
 const BonusSpinnerModal = () => {
   const canvasRef = useRef(null);
   
@@ -3359,14 +2999,11 @@ const colors = ['#ff6b6b', '#4ecdc4', '#45b7d1', '#f9ca24', '#6c5ce7'];
     </div>
   );
 };
-
 const BonusLetterModal = () => {
   const GIVEN = ["R", "S", "T", "L", "N", "E"];
   const isSelectingConsonants = bonusLetterType === "consonant";
-
   // NEW: limit and helpers
   const consonantLimit = 3;
-
   // pickable letters (only show letters user can actually click)
   // For vowels we will stage the vowel (stageVowel) and not reveal until Confirm is pressed.
   const pickableLetters = LETTERS.filter((letter) => {
@@ -3377,7 +3014,6 @@ const BonusLetterModal = () => {
       return VOWELS.has(letter) && !GIVEN.includes(letter) && !bonusVowel;
     }
   });
-
   // remove handlers
   const unselectConsonant = (ch) => {
     setBonusConsonants((prev) => prev.filter((c) => c !== ch));
@@ -3397,7 +3033,6 @@ const BonusLetterModal = () => {
       return next;
     });
   };
-
   // Stage a vowel (do NOT reveal/close yet) — user must press Confirm to proceed
   const stageVowel = (v) => {
     if (!VOWELS.has(v)) return;
@@ -3410,7 +3045,6 @@ const BonusLetterModal = () => {
     });
     // Do not call revealBonusLetters or close modal here — Confirm handles that
   };
-
   // Back handler: only relevant when you're on vowel selection.
   // Clears the vowel choice (if any) and returns to consonant selection so user can re-pick consonants.
   const handleBackFromVowel = () => {
@@ -3425,7 +3059,6 @@ const BonusLetterModal = () => {
     }
     setBonusLetterType("consonant");
   };
-
   // full-width grid so a row-spanning placeholder can center correctly
   const columns = isSelectingConsonants ? 6 : Math.min(6, pickableLetters.length || 1);
   const pickGridClasses = "grid gap-3 w-full";
@@ -3434,10 +3067,8 @@ const BonusLetterModal = () => {
     justifyItems: "center", // center each cell horizontally
     alignItems: "center",
   };
-
   // NEW: enforce limit - can't add more than 3 consonants
   const canPickMore = isSelectingConsonants ? bonusConsonants.length < consonantLimit : !bonusVowel;
-
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80">
       {/* modal slightly wider so message has room */}
@@ -3445,9 +3076,7 @@ const BonusLetterModal = () => {
         <h2 className="text-2xl font-bold mb-4 text-black">
           {isSelectingConsonants ? `Choose Consonant ${bonusConsonants.length + 1}/${consonantLimit}` : "Choose 1 Vowel"}
         </h2>
-
         <p className="text-sm text-gray-600 mb-4">Given: {GIVEN.join(", ")}</p>
-
         {/* Selected area */}
         <div className="mb-4">
           <div className="text-xs uppercase tracking-wide text-gray-500 mb-2">Selected</div>
@@ -3480,12 +3109,10 @@ const BonusLetterModal = () => {
             )}
           </div>
         </div>
-
         {/* show a helper message when at the consonant limit */}
         {isSelectingConsonants && bonusConsonants.length >= consonantLimit && (
           <div className="text-sm text-red-500 mb-2">Maximum {consonantLimit} consonants selected — remove one to pick another.</div>
         )}
-
         {/* Compact pickable grid (only shows pickable letters) */}
         <div className="flex justify-center mb-2">
           <div className="grid gap-3" style={{
@@ -3500,7 +3127,6 @@ const BonusLetterModal = () => {
                 const enabledClass = "bg-blue-500 text-white hover:bg-blue-600";
                 const disabledClass = "bg-gray-200 text-gray-500 cursor-not-allowed";
                 const title = disabled ? (isSelectingConsonants ? "Remove a consonant to pick another" : "Vowel already chosen") : `Pick ${letter}`;
-
                 // For consonants: call handleBonusLetter (commits immediately)
                 // For vowels: stage the vowel (requires Confirm to reveal)
                 const onClickHandler = () => {
@@ -3511,7 +3137,6 @@ const BonusLetterModal = () => {
                     stageVowel(letter);
                   }
                 };
-
                 return (
                   <button
                     key={letter}
@@ -3527,7 +3152,6 @@ const BonusLetterModal = () => {
             )}
           </div>
         </div>
-
         {/* Message displayed OUTSIDE the grid when no letters available */}
         {pickableLetters.length === 0 && (
           <div className="flex justify-center mb-2">
@@ -3540,7 +3164,6 @@ const BonusLetterModal = () => {
             </div>
           </div>
         )}
-
         {/* Action buttons: show Back & Confirm when on vowel screen; NO Close button */}
         <div className="mt-4 flex items-center justify-center gap-3">
           {!isSelectingConsonants && (
@@ -3551,7 +3174,6 @@ const BonusLetterModal = () => {
               >
                 ← Back
               </button>
-
               <button
                 onClick={() => {
                   if (!bonusVowel) return;
@@ -3574,8 +3196,6 @@ const BonusLetterModal = () => {
     </div>
   );
 };
-
-
   const BonusSolveInline = () => {
     const inputRef = useRef(null);
     useEffect(() => {
@@ -3624,7 +3244,6 @@ return (
   </div>
     );
   };
-
   const BonusWinnerSelectorModal = () => (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80">
       <div className="bg-white rounded-xl p-8 w-full max-w-lg text-center">
@@ -3646,7 +3265,6 @@ return (
       </div>
     </div>
   );
-
   const BonusReadyModal = () => (
     <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-black/70">
       <div className="bg-white rounded-2xl p-8 w-full max-w-lg text-center shadow-xl">
@@ -3660,15 +3278,12 @@ return (
       </div>
     </div>
   );
-
 const BonusResultModal = ({ result }) => {
   const btnRef = useRef(null);
-
   useEffect(() => {
     const t = setTimeout(() => btnRef.current?.focus(), 40);
     return () => clearTimeout(t);
   }, []);
-
   const handleContinue = () => {
     if (bonusResultHideTimeoutRef.current) {
       clearTimeout(bonusResultHideTimeoutRef.current);
@@ -3678,7 +3293,6 @@ const BonusResultModal = ({ result }) => {
     setBonusResult(null);
     setPhase("done");
   };
-
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-6 bg-black/80">
       <div className={cls("bg-white rounded-3xl p-10 w-full max-w-3xl text-center shadow-2xl",
@@ -3691,7 +3305,6 @@ const BonusResultModal = ({ result }) => {
   <p className="text-2xl text-black">You solved the bonus puzzle and won a</p>
   <div className="font-extrabold text-3xl mt-2">{bonusPrize}</div>
 </div>
-
           </>
         ) : (
           <>
@@ -3700,9 +3313,7 @@ const BonusResultModal = ({ result }) => {
             <p className="text-xl font-bold text-black mt-2">The word was: <span className="uppercase">{board.map((b) => b.ch).join("")}</span></p>
           </>
         )}
-
         <p className="text-sm text-gray-600 mt-4">Press <strong>Enter</strong> or <strong>Space</strong> or click Continue.</p>
-
         <div className="mt-8 flex justify-center gap-4">
           <button
             ref={btnRef}
@@ -3716,7 +3327,6 @@ const BonusResultModal = ({ result }) => {
     </div>
   );
 };
-
   const StatsModal = () => (
   <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80">
     <div className="bg-white rounded-xl p-6 w-full max-w-4xl text-center max-h-[80vh] overflow-y-auto">
@@ -3733,13 +3343,11 @@ const BonusResultModal = ({ result }) => {
 </div>
       <div className="mb-8">
         <h3 className="text-xl font-bold mb-4 text-black">Overall Game Stats</h3>
-
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-black">
           <div className="bg-gray-100 p-4 rounded-lg">
             <div className="text-2xl font-bold text-blue-600">{gameStats.totalSpins}</div>
             <div className="text-sm">Total Spins</div>
           </div>
-
           
           <div className="bg-gray-100 p-4 rounded-lg">
             <div className="text-2xl font-bold text-green-600">{gameStats.puzzlesSolved}</div>
@@ -3777,7 +3385,6 @@ const BonusResultModal = ({ result }) => {
   <div className="text-2xl font-bold text-indigo-600">{gameStats.gameStartTime ? Math.round((Date.now() - gameStats.gameStartTime) / 60000) + "m" : "N/A"}</div>
   <div className="text-sm">Game Duration</div>
 </div>
-
 {/* <div className="bg-gray-100 p-4 rounded-lg">
             <div className="text-2xl font-bold text-pink-600">${gameStats.maxComeback.toLocaleString()}</div>
             <div className="text-sm">Biggest Comeback</div>
@@ -3795,7 +3402,6 @@ const BonusResultModal = ({ result }) => {
   </div>
   <div className="text-sm">Avg Turn Time</div>
 </div> */}
-
           {/* </div> */}
           {/* <div className="bg-gray-100 p-4 rounded-lg">
             <div className="text-2xl font-bold text-teal-600">
@@ -3816,8 +3422,6 @@ const BonusResultModal = ({ result }) => {
             <div className="text-sm">Most Incorrect Letters</div>
           </div>
         </div>
-
-
       </div>
       <div className="mb-6">
         <h3 className="text-xl font-bold mb-4 text-black">Team Statistics</h3>
@@ -3830,7 +3434,6 @@ const BonusResultModal = ({ result }) => {
   <div className="flex justify-between"><span>Puzzles Won:</span><span className="font-bold">{gameStats.teamStats[team.name]?.puzzlesSolved || 0}</span></div>
   <div className="flex justify-between"><span>Correct Guesses:</span><span className="font-bold">{gameStats.teamStats[team.name]?.correctGuesses || 0}</span></div>
   <div className="flex justify-between"><span>Wrong Guesses:</span><span className="font-bold">{gameStats.teamStats[team.name]?.incorrectGuesses || 0}</span></div>
-
   
   <div className="flex justify-between">
     <span>Efficiency:</span>
@@ -3846,7 +3449,6 @@ const BonusResultModal = ({ result }) => {
       : "N/A"}
   </span>
 </div> */}
-
   <div className="flex justify-between"><span>Correct Letter Streak:</span><span className="font-bold">{gameStats.teamStats[team.name]?.maxConsecutive || 0}</span></div>
   <div className="flex justify-between"><span>Vowels Bought:</span><span className="font-bold">{gameStats.teamStats[team.name]?.vowelsBought || 0}</span></div>
   <div className="flex justify-between"><span>Vowel Success Rate:</span><span className="font-bold">{(() => { const successes = gameStats.teamStats[team.name]?.vowelSuccesses || 0; const failures = gameStats.teamStats[team.name]?.vowelFailures || 0; return (successes + failures) > 0 ? Math.round((successes / (successes + failures)) * 100) + "%" : "N/A"; })()}</span></div>
@@ -3871,7 +3473,6 @@ const BonusResultModal = ({ result }) => {
     </div>
   </div>
 );
-
   // Render branches
 if (phase === "bonus") {
   const bonusState = bonusActive ? "countdown" : (bonusPrize ? (bonusAwaitingReady ? "ready" : "letters") : "prize_spin");
@@ -3916,7 +3517,6 @@ if (phase === "bonus") {
     setBonusLetterType={setBonusLetterType}
   />
 )}
-
       
    {/* Other bonus states */}
       {bonusState !== "prize_spin" && (
@@ -3973,7 +3573,6 @@ if (phase === "bonus") {
     </div>
   );
 }
-
   if (phase === "done") {
     const sorted = [...teams].sort((a, b) => b.total - a.total);
     return (
@@ -4002,15 +3601,12 @@ if (phase === "bonus") {
   bonusSpinning={bonusSpinning}
   showMysterySpinner={showMysterySpinner}
 />
-
         <div className="max-w-6xl w-full mx-auto p-6 bg-white/10 rounded-2xl backdrop-blur-md flex flex-col gap-6">
           <h1 className="text-3xl md:text-4xl font-black tracking-tight mb-2 text-center">Game Over!</h1>
-
           <div className="text-4xl font-semibold text-center">
             {winners.length > 1 ? "Winners:" : "Winner:"}{" "}
             <span className="font-black text-yellow-300">{winners.join(", ")}</span>
           </div>
-
           {/* make the list scrollable and bounded so many teams don't blow out the page */}
           <div className="overflow-y-auto teams-scroll max-h-[60vh] pr-4 space-y-3">
             {sorted.map((t, i) => {
@@ -4028,7 +3624,6 @@ if (phase === "bonus") {
                     </div>
                     <div className="text-2xl font-black tabular-nums">${t.total.toLocaleString()}</div>
                   </div>
-
                   {Object.keys(prizeCounts).length > 0 && (
                     <div className="mt-2 flex gap-2 flex-wrap">
                       {Object.entries(prizeCounts).map(([prize, cnt]) => (
@@ -4048,7 +3643,6 @@ if (phase === "bonus") {
               );
             })}
           </div>
-
           {/* bottom actions remain visible below the scrolling list */}
           <div className="mt-2 flex gap-2 justify-center flex-wrap">
             <button onClick={restartAll} className="px-4 py-2 rounded-xl bg-white text-black font-semibold hover:opacity-90">Play Again <br/>(with same settings)</button>
@@ -4056,13 +3650,10 @@ if (phase === "bonus") {
             <button onClick={() => setShowStats(true)} className="px-4 py-2 rounded-xl bg-blue-500 hover:bg-blue-600 font-semibold">Statistics</button>
           </div>
         </div>
-
         {showStats && <StatsModal />}
       </div>
     );
   }
-
-
 // CODE TO REPLACE WITH
 if (phase === "setup") {
     // helper used inside render to interpret tempTeamCount for live rendering
@@ -4070,7 +3661,6 @@ if (phase === "setup") {
       const n = parseIntSafe(tempTeamCount);
       return Number.isFinite(n) ? Math.max(2, Math.min(MAX_TEAMS, n)) : Math.max(2, Math.min(MAX_TEAMS, teamCount));
     })();
-
     // Start-handler that applies typed values, sanitizes names, and initializes teams/puzzles
     const startGameFromSetup = async () => {
       // Ensure audio is unlocked/resumed in response to this user gesture.
@@ -4080,31 +3670,25 @@ if (phase === "setup") {
         // ignore; unlock is best-effort
         console.warn("sfx.unlock() failed or not needed:", e);
       }
-
       // Play the start sound (best-effort)
       try {
         sfx.play("startGame");
       } catch (e) {
         console.warn("Failed to play startGame sound:", e);
       }
-
       // Compute final team count & rounds deterministically from temp values
       const parsedTeams = parseIntSafe(tempTeamCount);
       const finalTeamCount = Number.isFinite(parsedTeams) ? Math.min(MAX_TEAMS, Math.max(2, parsedTeams)) : Math.min(MAX_TEAMS, Math.max(2, teamCount));
-
       const parsedRounds = parseIntSafe(tempRoundsCount);
       const maxRounds = Math.max(1, (puzzles && puzzles.length) || FALLBACK.length);
       const finalRounds = Number.isFinite(parsedRounds) ? Math.min(Math.max(1, parsedRounds), maxRounds) : Math.min(Math.max(1, roundsCount), maxRounds);
-
       // Persist these sanitized values to state
       setTeamCount(finalTeamCount);
       setTempTeamCount(String(finalTeamCount));
       setRoundsCount(finalRounds);
       setTempRoundsCount(String(finalRounds));
-
       // Ensure teamNames array is the right length and trimmed
       const names = makeTeamNamesArray(finalTeamCount, teamNames);
-
       // Now initialize teams and everything else
       setTeams(names.map((name) => ({ name, total: 0, round: 0, prizes: [], holding: [] })));
       setTeamNames(names);
@@ -4115,22 +3699,18 @@ if (phase === "setup") {
       setMysteryPrize(null);
       setWonSpecialWedges([]);
       setCurrentWedges([...WEDGES]);
-
       const count = Math.max(1, Math.min(finalRounds, (puzzles && puzzles.length) || FALLBACK.length));
       const chosen = selectRandomPuzzles(puzzles && puzzles.length ? puzzles : FALLBACK, count);
-
       setBonusResult(null);
       setBonusWinnerName(null);
       winnersRef.current = [];
       setWinners([]);
-
       // select puzzles based on finalRounds
       setSelectedPuzzles(chosen);
       setIdx(0);
       const first = chosen[0] || FALLBACK[0];
       setBoard(normalizeAnswer(first.answer));
       setCategory(first.category || "PHRASE");
-
       // Track category for statistics
       setGameStats(prev => {
         const categoryData = prev.categoryStats[first.category || "PHRASE"] || { attempted: 0, solved: 0 };
@@ -4145,10 +3725,8 @@ if (phase === "setup") {
           }
         };
       });
-
       setPhase("play");
     };
-
     return (
       // MODIFIED: Added overflow-y-auto and changed justify-center to justify-start on mobile
       <div className={cls("min-h-screen h-screen text-white flex flex-col items-center justify-start lg:justify-center overflow-y-auto p-4 sm:p-6", GRADIENT)}>
@@ -4205,7 +3783,6 @@ if (phase === "setup") {
   onBlur={() => applyTempTeamCount()}
   className="w-full sm:w-20 px-4 py-3 rounded-lg bg-black/30 text-white text-center font-bold text-xl border border-white/30 focus:outline-none focus:ring-2 focus:ring-yellow-400 transition"/>
                 </div>
-
                 {/* MODIFIED: Number of Rounds - Stacks on mobile */}
                 <div>
                   <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2 sm:gap-4 mb-2">
@@ -4266,7 +3843,6 @@ if (phase === "setup") {
                 </div>
               </div>
             </div>
-
             {/* --- How to Play Card --- */}
             <div className="rounded-2xl p-6 md:p-8 backdrop-blur-md bg-white/10 border border-white/10 shadow-lg">
               <h2 className="text-3xl font-bold text-center text-white mb-8">How to Play</h2>
@@ -4302,7 +3878,6 @@ if (phase === "setup") {
   // Main play UI
   const baseBgColor = isCharging ? "#16a34a" : "#22c55e";
   const fillBgColor = "rgba(4,120,87,0.95)";
-
   
 // Main play UI
   return (
@@ -4337,7 +3912,6 @@ if (phase === "setup") {
         bonusSpinning={bonusSpinning}
         showMysterySpinner={showMysterySpinner}
       />
-
       <div
         className={cls(
           "w-full h-full flex flex-col",
@@ -4373,7 +3947,6 @@ if (phase === "setup") {
               </button>
             </div>
           </div>
-
           {/* Middle Section: Puzzle and Unified Keyboard */}
           <div className="w-full">
             <h2 className="text-xl sm:text-2xl font-bold tracking-widest uppercase text-center mb-2">{category}</h2>
@@ -4400,7 +3973,6 @@ if (phase === "setup") {
               <div className="text-center mt-2 text-sm opacity-75">{awaitingConsonant ? "Pick a consonant" : "Spin, buy a vowel, or solve"}</div>
             </div>
           </div>
-
           {/* Bottom Section: Compact Team Cards */}
           <div className="w-full pb-2">
             <div className="grid grid-cols-3 gap-2 w-full">{teams.map((t, i) => <TeamCard key={i} t={t} i={i} />)}</div>
@@ -4467,7 +4039,6 @@ if (phase === "setup") {
           </div>
         </main>
       </div>
-
       {/* --- Modals and Overlays (Unchanged) --- */}
       <div className={cls("fixed inset-0 z-50 flex items-center justify-center", !zoomed && "hidden pointer-events-none")}>
         <div className="absolute inset-0 bg-black/70" />
