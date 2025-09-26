@@ -18,7 +18,7 @@
 { "category": "TITLE", "answer": "FRIEND GROUP LEADER" },
     { "category": "CLASSIC PHRASE", "answer": "WHAT WOULD JON DO" },
         { "category": "MUSIC", "answer": "JONYE WEST" },
-          { "category": "MUSIC", "answer": "FRIDAY NIGHT" },
+          { "category": "SONG TITLE", "answer": "FRIDAY NIGHT" },
     { "category": "EVENT", "answer": "JONFEST" },
     { "category": "MOVIE", "answer": "JON WICK" },
     { "category": "MOVIE", "answer": "THE DARK JON RISES" },
@@ -38,7 +38,7 @@
     { "category": "MOVIE", "answer": "EVERYTHING EVERYWHERE JON AT ONCE" },
  { "category": "MOVIE", "answer": "EVERYTHING EVERYWHERE JON WON" },
 { "category": "MOVIE CHARACTER", "answer": "MINCH YODA" },
-{ "category": "MOVIE", "answer": "JON GUMP" },
+
 { "category": "MOVIE", "answer": "THE DEVIL WEARS JON" },
 { "category": "INTERCOURSE RELATED", "answer": "MORNING GLORY HOLE" },
 { "category": "EMPLOYMENT", "answer": "CHILD LABOR" },
@@ -52,7 +52,8 @@
 { "category": "PHRASE", "answer": "PLATINUM WITH NO FEATURES" },
 { "category": "BOOK TITLE", "answer": "EMAILS FROM AN ASSHOLE" },
 { "category": "BOOK TITLE", "answer": "THE GIVING TREE" },
-{ "category": "ON THE MAP", "answer": "MINDEN CITY MICHIGAN" }
+{ "category": "ON THE MAP", "answer": "MINDEN CITY MICHIGAN" },
+{ "category": "HOBBYISTS", "answer": "KNITTERS" }
 
   ],
 
