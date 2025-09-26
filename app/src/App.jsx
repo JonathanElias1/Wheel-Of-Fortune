@@ -4073,14 +4073,14 @@ if (phase === "setup") {
       {bonusResult && <BonusResultModal result={bonusResult} />}
       {showBonusSolveModal && <BonusSolveInline />}
       {showStats && <StatsModal />}
-      {showWinScreen && <WinScreen winner={winners[0] || roundWinner || "Winner"} onClose={() => {
-        try { sfx.stop("solve"); } catch { }
-        setShowWinScreen(false);
-        setRoundWinner(null);
-        setIsRevealingLetters(false);
-        finishingRef.current = false;
-        nextPuzzle();
-      }} />}
+{showWinScreen && <WinScreen winner={teams[active]?.name || "Winner"} onClose={() => {
+    try { sfx.stop("solve"); } catch { }
+    setShowWinScreen(false);
+    setRoundWinner(null); // This can be removed now, but is harmless
+    setIsRevealingLetters(false);
+    finishingRef.current = false;
+    nextPuzzle();
+}} />}
       <ConfettiCanvas trigger={showWinScreen || bonusResult === 'win'} />
     </div>
   );
